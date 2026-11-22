@@ -5,7 +5,7 @@
 
 ## Ürünün tamamı, kısa tanım
 
-Kullanıcı self-hosted bir PaperMorning kurulumu üzerinde **kayıt olur**, konuları için **öncelik** ve **bilgi seviyesi** seçer. Akademik makaleler deterministik ağırlıklı bir pipeline ile toplanır ve ortak olarak analiz edilir. Her kullanıcının ayrı bir günlük bilim dergisi **web arayüzünde ve PDF olarak saklanır**, her sabah kendi saat diliminde **08.00'de e-posta** ile gönderilir. Kullanıcılar yazıları **beğenebilir / beğenmeyebilir**.
+Kullanıcı self-hosted bir PaperMorning kurulumu üzerinde **kayıt olur**, konuları için **öncelik** ve **bilgi seviyesi** seçer. Akademik makaleler deterministik ağırlıklı bir pipeline ile toplanır ve ortak olarak analiz edilir. Her kullanıcının ayrı bir günlük bilim dergisi **web arayüzünde ve PDF olarak saklanır**, her sabah kendi saat diliminde **08.00'de e-posta** ile gönderilir. Kullanıcılar yazıları **beğenebilir / beğenmeyebilir**. **Her sayının en sonundaki Ufuk Raporu**, seçilen makaleleri sentezleyip araştırılabilecek akademik sorular, denenebilecek sektörel pilotlar ve gerekçeli gelişim öngörüleri üretir.
 
 ## P0 — Yapılacaklar (yalın)
 
@@ -20,6 +20,8 @@ Kullanıcı self-hosted bir PaperMorning kurulumu üzerinde **kayıt olur**, kon
 9. **Geri bildirim.** Her yazıda **👍 / 👎**, kullanıcı başına yazı için tek aktif oy; değiştirebilir. İsteğe bağlı sayı genel değerlendirmesi sonraya kalabilir. Oylar veritabanına kaydedilir; P0'da LLM eğitimi veya karmaşık tavsiye algoritması yok. İleride kullanıcının konu tercihlerini iyileştirmek için değerlendirilebilir.
 10. **Günlük gönderim.** PDF ve yazılar 08.00'den **önce** hazırlanır. E-postanın gövdesinde haber başlıkları ve okunabilir kısa özetler, kaynaklar ve kişinin özel web/PDF bağlantısı bulunur. PDF eki küçükse gönderilebilir ama **zorunlu değil**. Gönderim kaydı tutulur; iki kez tıklama/yeniden çalıştırma çift sayı oluşturmamalı. SMTP/posta sağlayıcısı self-hosting kurulum sahibinin sorumluluğundadır.
 11. **Demo.** İki hesapla farklı ilgi alanları, aynı makalenin ortak analizi, web/PDF arşivi, 👍/👎 kaydı, 3 saatlik token süresi politikası, Haiku/Sonnet ayrımı ve **gerçek test e-postası** gösterilebilmeli. Otomatik 08.00 çalışması testi manuel olarak tetiklenebilmeli.
+
+12. **Ufuk Raporu — en değerli kapanış bölümü.** Her günlük sayının **en sonunda** (web, PDF ve arşivde) ayrı editoryal bölüm: (a) o sayıdaki araştırmaların ortak sonucu, (b) **akademik olarak araştırılabilecek** somut soru/hipotez ve ilk deney, (c) **sektörde denenebilecek** pilot/prototip ve neyi ölçmek gerektiği, (d) gelişim potansiyeli ile engeller/belirsizlikler, (e) **bir sonraki adım**. Özgün makale kanıtı, PaperMorning yorumu ve öneri **ayrı etiketlenir**. E-postada en önemli bir fikirle tam bölüme bağlantı verilir. Bölüm için 👍/👎 P0 kapsamındadır. Uydurulmuş fırsat eklenmez; kanıt yoksa dürüstçe belirtilir. Mevcut ortak analizleri kullansın, gereksiz yeniden PDF okuma ve Opus çağrısı olmasın. Ayrıntı: [OUTLOOK_AND_OPPORTUNITIES.md](OUTLOOK_AND_OPPORTUNITIES.md).
 
 ## P0 DEĞİL — Claude Code'un kendiliğinden eklememesi gerekenler
 
@@ -47,7 +49,7 @@ Tek deploy edilen **modüler monolit**, tek kalıcı veri deposu, yerel/dış vo
 
 ## Kabul ölçütü
 
-**Bir kurulum, iki kullanıcı, iki farklı kişisel sayı, ortak bilimsel analiz, güvenli üç saatlik giriş, geçmiş PDF'ler, yazı beğenme/beğenmeme, Haiku/Sonnet çağrı kayıtları ve gerçek e-posta.** Bunları yapmadan yeni altyapı inşa etmeyelim.
+**Bir kurulum, iki kullanıcı, iki farklı kişisel sayı, ortak bilimsel analiz, güvenli üç saatlik giriş, geçmiş PDF'ler, yazı beğenme/beğenmeme, her sayının sonundaki kaynaklı akademik/sektörel Ufuk Raporu, Haiku/Sonnet çağrı kayıtları ve gerçek e-posta.** Bunları yapmadan yeni altyapı inşa etmeyelim.
 
 ---
 
