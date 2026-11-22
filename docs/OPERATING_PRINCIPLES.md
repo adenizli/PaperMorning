@@ -63,7 +63,8 @@ Günlük çalışma beklenen sonuçları:
 3. Gerçek yorum gerektiren az sayıdaki aday için Claude API'nin devreye girmesi.
 4. Doğrulanabilir kaynaklı yazıların üretilmesi.
 5. Sabit yayın tasarımına yerleştirme, PDF/dijital sayı üretimi.
-6. Başarılı, tarihli bir sayı olarak saklama; her kullanıcıya göre kişisel seçki oluşturma ve **08.00'de gerçek e-posta** gönderme. Gönderim tekrarları kayıt altına alınır.
+6. Başarılı, tarihli bir sayı olarak saklama; **çıktı metni ve PDF dosyasının kalıcı kopyasını tutma**, her kullanıcıya göre kişisel seçki oluşturma ve **08.00'de gerçek e-posta** gönderme. Gönderim tekrarları kayıt altına alınır.
+7. Okuyucunun yazı başına 👍/👎 geri bildirimini kaydetme; ilk sürümde otomatik öğrenme veya karmaşık analiz yapmama.
 
 Bunlar **mantıksal beklentiler**; fiziksel servis veya agent tasarımı değildir. Gün içindeki kaynak taramasının sıklığı, tam çalışma akışı ve zamanlamanın aracı mimari aşamasında seçilir.
 
@@ -78,7 +79,7 @@ Başarısızlık veya tekrarda:
 - **Ön eleme ilk, pahalı anlamsal okuma sonra:** Tüm makalelerin tam metnini bir modelle incelemek başlangıç varsayımı değildir.
 - **Gerektiği kadar bağlam:** Makalenin destekleyici bölümleri okunmalı; her şeyi gerekçesiz modele aktarmak doğru değil.
 - **Tekrar kullanım:** Aynı makalenin aynı sürümünün bilimsel analizi bütün okuyucular için ortak yeniden kullanılabilmeli. Aynı dil/bilgi seviyesi için üretilmiş yazı da uygunsa paylaşılmalı; kişisel seçki/dağılım ayrıca oluşturulmalı. İçerik veya analiz sözleşmesi değişirse geçerlilik kontrol edilmeli.
-- **Ölçülebilir bütçe:** Bir sayıdaki çağrı sayısı, girdi/çıktı tokenları, tahmini/gerçek API maliyeti ve başarısız çağrılar denetlenebilir olmalı.
+- **Ölçülebilir bütçe:** Bir sayıdaki çağrı sayısı, girdi/çıktı tokenları, tahmini/gerçek API maliyeti ve başarısız çağrılar denetlenebilir olmalı. Basit anlamsal işler Haiku; ana araştırma/yazım Sonnet; **Opus yalnızca konfigürasyonla açılan istisnai eskalasyon**, otomatik maliyet patlaması olmamalı.
 - **Sınır aşımı:** Günlük kullanım/harcama üst sınırına yaklaşınca davranış belirli ve görünür olmalı; sınırsız retry veya sessizce yüksek maliyet kabul edilemez.
 - **Kaliteden rastgele tasarruf yok:** Maliyeti azaltmak için kaynak doğrulaması veya kritik araştırma değerlendirmesi atlanmamalı.
 
@@ -94,7 +95,7 @@ Başarısızlık veya tekrarda:
 - Bir sayıyı tekrar çalıştırma, yanlışlıkla iki kez yayın veya aynı işi tekrar faturalandırma tehlikesini kontrol edebildiğini kanıtlıyor.
 - Gerçek kaynaklı ve okunabilir bir PDF sayı üretiyor.
 
-**Kapsam sınırı:** Demo için tüm hedef işletim sistemlerinde hazır paket, merkezi hosting platformu, kurumsal IAM veya merkezi e-posta altyapısı şart değil. **Tek kurulumda basit güvenli kayıt/giriş, iki okuyucu ve günlük e-posta gönderimi artık şart.** Ayrıntı: [çok kullanıcılı e-posta gereksinimleri](MULTI_USER_EMAIL_REQUIREMENTS.md).
+**Kapsam sınırı:** Demo için tüm hedef işletim sistemlerinde hazır paket, merkezi hosting platformu, kurumsal IAM veya merkezi e-posta altyapısı şart değil. **Tek kurulumda basit güvenli kayıt/giriş (3 saat, refresh yok), iki okuyucu, web/PDF arşivi, 👍/👎 ve günlük e-posta gönderimi artık şart.** Ayrıntı: **[güncel Lean MVP kapsamı](LEAN_MVP_SCOPE.md)** ve [çok kullanıcılı e-posta gereksinimleri](MULTI_USER_EMAIL_REQUIREMENTS.md).
 
 ## 7. Mimariyi tasarlayan kişinin kararına bırakılanlar
 
