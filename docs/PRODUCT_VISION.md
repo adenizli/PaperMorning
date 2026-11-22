@@ -69,6 +69,14 @@ Tercihler kullanıcı hesabına bağlı kalır ve okuyucu her defasında yeniden
 
 Tek bir sayı bu türlerin tamamını bulundurmak zorunda değildir.
 
+### En önemli kapanış: Ufuk Raporu
+
+**Her sayının en sonunda, editoryal değeri en yüksek bölüm** bulunur: [Akademik ve Sektörel Öngörü](OUTLOOK_AND_OPPORTUNITIES.md).
+
+Bu bölüm araştırma haberlerini bir kez daha özetlemek yerine **birlikte yorumlar**: ortak eğilimleri veya çelişkileri gösterir; açık akademik problemleri ve deney fikirlerini saptar; sektör için denenebilir pilot/prototip fırsatlarını, olgunluk düzeyini ve gelişim ihtimalini tartışır; okura **ilk somut adımı** önerir. Her fırsat hangi makaleye dayandığını gösterir; bulgu, yorum ve öngörü ayrı sunulur. Abartılı kesinlik, temelsiz pazar tahmini veya her güne zorla fikir doldurma yasaktır.
+
+Yayın sayfasında ve arşivlenen PDF'de en sona yerleştirilir; günlük e-postada en güçlü bulgu/öneri ön izleme olarak gösterilir. Kapanış dosyasına 👍/👎 geri bildirimi de verilebilir.
+
 ## 7. Kullanıcının gerçekten aldığı değer
 
 Okuyucunun dergi sonrasında cevaplayabilmesi gereken sorular:
@@ -95,6 +103,7 @@ Okuyucunun dergi sonrasında cevaplayabilmesi gereken sorular:
 - Kullanıcının kod yazmasını gerektirmeyen işletim / inceleme deneyimi.
 - Ortak makalenin analizinin kullanıcılar arasında yeniden kullanıldığının, iki farklı kişisel sayı ve gerçek e-posta gönderiminin gösterilmesi.
 - Makale 👍/👎 kaydı, Haiku/Sonnet görev ayrımı ve **3 saatlik refresh'siz oturum** davranışının gösterilmesi.
+- **Ufuk Raporu:** Sayının en sonunda kaynaklara bağlı **en az bir akademik araştırma sorusu/deney ve bir sektörel pilot**; mevcut kanıt elvermiyorsa gerekçeli sınırlama, somut ilk adım ve spekülasyon etiketi.
 
 Bunlar **neyle, hangi servisle veya hangi topolojiyle** yapılacağına dair talimat değildir.
 
