@@ -15,7 +15,7 @@ Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığ
 - [ ] En az iki araştırma ilgi alanı belirlenebiliyor.
 - [ ] Alan **önceliği** ve kullanıcının o alandaki **bilgi seviyesi** ayrı ayrı, anlaşılır biçimde seçilebiliyor.
 - [ ] Tercihler kaydedilip tekrar açıldığında korunuyor.
-- [ ] Aynı kurulumda **iki hesap** açılıp güvenli giriş yapılabiliyor; e-posta adresleri doğrulanabiliyor ve hesap kurtarma yolu mevcut.
+- [ ] Aynı kurulumda **iki hesap** açılıp güvenli giriş yapılabiliyor; e-posta adresleri minimum yöntemle doğrulanabiliyor. Oturum/token **3 saatte sona eriyor**, refresh token yok. Kapsamlı parola kurtarma P0 değil.
 - [ ] Kullanıcıların tercihleri, yayınları ve abonelik ayarları birbirinden izole.
 
 ### B2. Gerçek veriyle içerik
@@ -32,7 +32,8 @@ Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığ
 - [ ] İçindekiler veya net bir bölüm navigasyonu var.
 - [ ] Kapak dosyası, diğer yazılar ve kaynaklar ayrışıyor.
 - [ ] Sayfalar gerçekten okunur; kopan metin, taşan başlık, boş/tekrarlanan sayfa yok.
-- [ ] Kullanıcı **PDF** açabiliyor / indirebiliyor.
+- [ ] Kullanıcı **web arayüzünde yazıları okuyabiliyor**, PDF açabiliyor/indirebiliyor, daha önce gönderilen PDF ve içerikler kalıcı arşivde korunuyor.
+- [ ] Kullanıcı bir yazıya 👍 veya 👎 bırakabiliyor ve oyunu değiştirebiliyor.
 - [ ] Daha sonra yeniden açılabilen bir sayı mevcut.
 
 ### B4. Tekrar üretilebilirlik
@@ -49,7 +50,7 @@ Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığ
 - [ ] Bir uygulama hatası / eksik izin demoyu tamamen durdurmuyor; en azından son başarılı sayı görülebiliyor ve tarihi açık.
 - [ ] API anahtarları, gizli bilgiler veya özel kullanıcı verileri ekran görüntüsüne, repoya veya kullanıcı arayüzüne sızmıyor.
 - [ ] Demo sonunda hangi parçaların gerçekten canlı, hangilerinin yalnızca hazırlanmış olduğu açıkça söylenebiliyor.
-- [ ] Deterministik işlemler gereksiz Claude API çağrısı oluşturmuyor; çağrı sayısı ve maliyeti görülebiliyor.
+- [ ] Deterministik işlemler gereksiz Claude API çağrısı oluşturmuyor; çağrı sayısı ve maliyeti görülebiliyor. Haiku ve Sonnet görev bazında kullanılıyor; **Opus varsayılan olarak kapalı**, yalnızca istisnai durum için açılabilir.
 - [ ] Yeniden deneme sırasında aynı işin gereksiz tekrar faturalandırılması ve çift sayı yayımlanması önleniyor.
 - [ ] Yerel bilgisayar uyku/kapalıysa zamanlanmış işin otomatik çalışmasının garanti edilmediği kullanıcıya açık.
 - [ ] Aboneliği kapalı veya doğrulanmamış hesaba günlük dergi gönderilmiyor; gönderim durumu izlenebiliyor.
@@ -104,7 +105,7 @@ Bu belgenin **cevaplamadığı** sorular:
 
 Bunlar **proje sahibinin ayrı mimari tasarımında** çözülür. Ürün sözleşmesi bunların hiçbirini önden kilitlemez.
 
-**Kabul edilmiş ürün kısıtları:** Self-hosted-first; tek kurulumda çok kullanıcılı güvenli kayıt; kullanıcıya özel tercihler; yerel saat diliminde günlük 08.00 e-posta teslimi; ortak bilimsel analiz; deterministik-first; Claude API yalnızca gerekli semantik/yazınsal işler için. Ayrıntı: [Çalışma ve maliyet ilkeleri](OPERATING_PRINCIPLES.md) ve [çok kullanıcılı e-posta gereksinimleri](MULTI_USER_EMAIL_REQUIREMENTS.md).
+**Kabul edilmiş ürün kısıtları:** Self-hosted-first; tek kurulumda çok kullanıcılı basit güvenli kayıt, 3 saatlik refresh'siz token; kullanıcıya özel tercihler; yerel saat diliminde günlük 08.00 e-posta teslimi; ortak bilimsel analiz; kalıcı web/PDF arşivi; yazı 👍/👎; Haiku/Sonnet bazlı görev yönlendirmesi; deterministik-first. **Güncel P0:** [Lean MVP kapsamı](LEAN_MVP_SCOPE.md). Diğer ayrıntılar: [Çalışma ve maliyet ilkeleri](OPERATING_PRINCIPLES.md) ve [çok kullanıcılı e-posta gereksinimleri](MULTI_USER_EMAIL_REQUIREMENTS.md).
 
 ## G. Claude Code'a devir ön şartı
 
