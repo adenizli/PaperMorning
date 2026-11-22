@@ -1,6 +1,6 @@
 # PaperMorning
 
-**Kendi bilgisayarında veya kendi seçtiğin sunucuda çalıştırabildiğin; belirlediğin saatte kişisel bilim dergisi hazırlayan sistem.**
+**Kendi bilgisayarında veya kendi seçtiğin sunucuda barındırabildiğin; birden fazla okuyucuya kişisel bilim dergilerini her sabah 08.00'de e-posta olarak ulaştıran sistem.**
 
 PaperMorning, akademik makaleleri arka arkaya özetleyen bir liste değil; yeni bilimsel çalışmaları takip ederek okura **bu hafta/dün ne değişti, neden önemli ve kanıt ne kadar güçlü?** sorularını yanıtlayan kişisel bir dijital yayın fikridir.
 
@@ -10,7 +10,7 @@ PaperMorning, akademik makaleleri arka arkaya özetleyen bir liste değil; yeni 
 
 **Salı, 24 Kasım 2026:** Seçilmiş araştırma alanlarında gerçek makalelerden beslenen, okunabilir bir dergi sayısı üretebilen ve canlı bir ortamda gösterilebilen uçtan uca MVP.
 
-İstenen kalıcı ürün, **kurulum sahibinin belirlediği saatte, her sabah otomatik olarak** yeni bir sayı üreten sistemdir. **Merkezi SaaS zorunlu değildir; self-hosting esastır.** Claude API, deterministik yapılabilen işler için değil, gerçekten araştırma yorumlama ve yazı hazırlama gereken adımlar için kullanılmalıdır. Pazartesi gününe özel daha uzun haftalık sayı fikri daha sonra değerlendirilebilir; salı günkü demoyu geciktirmemelidir.
+İstenen kalıcı ürün, her kullanıcı için kendi zaman diliminde **sabah 08.00'de e-posta teslimini** hedefleyen, dergiyi önceden üreten sistemdir. **Merkezi SaaS zorunlu değildir; self-hosting esastır.** Claude API, deterministik yapılabilen işler için değil, gerçekten araştırma yorumlama ve yazı hazırlama gereken adımlar için kullanılmalıdır. Pazartesi gününe özel daha uzun haftalık sayı fikri daha sonra değerlendirilebilir; salı günkü demoyu geciktirmemelidir.
 
 ## Ürün belgeleri
 
@@ -18,6 +18,7 @@ PaperMorning, akademik makaleleri arka arkaya özetleyen bir liste değil; yeni 
 - [Editoryal ilkeler ve kalite çıtası](docs/EDITORIAL_STANDARDS.md)
 - [Salı demo senaryosu ve kabul kriterleri](docs/DEMO_ACCEPTANCE.md)
 - [Self-hosting, günlük çalışma ve API maliyeti ilkeleri](docs/OPERATING_PRINCIPLES.md)
+- [Çok kullanıcılı kayıt ve 08.00 e-posta teslimi gereksinimleri](docs/MULTI_USER_EMAIL_REQUIREMENTS.md)
 
 ## Yetki ve çalışma sırası
 
@@ -26,7 +27,7 @@ PaperMorning, akademik makaleleri arka arkaya özetleyen bir liste değil; yeni 
 3. **Uygulama:** Mimari onayından sonra Claude Code'a verilir.
 4. **Review ve yayın:** Proje sahibi çıktı kalitesini, davranışı ve deploy sonucunu inceler.
 
-**Bu belgeler kod, framework, veritabanı, hosting sağlayıcısı, agent topolojisi veya API entegrasyonu mimarisi seçmez.** Self-hosted çalışma, deterministik-first işleme, kullanıcı önceliği ve bilgi seviyesini ayrı tutma ise ürün gereksinimleridir. Bunların *nasıl* gerçekleştirileceğine proje sahibi karar verir.
+**Bu belgeler kod, framework, veritabanı, hosting sağlayıcısı, agent topolojisi veya API entegrasyonu mimarisi seçmez.** Self-hosted çalışma, çok kullanıcılı güvenli kayıt/giriş, kullanıcı başına tercihler, 08.00 e-posta teslimi, deterministik-first işleme, kullanıcı önceliği ve bilgi seviyesini ayrı tutma ürün gereksinimleridir. Bunların *nasıl* gerçekleştirileceğine proje sahibi karar verir.
 
 ## Değişmez ürün ilkesi
 
