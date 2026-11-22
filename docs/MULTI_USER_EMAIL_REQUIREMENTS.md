@@ -29,14 +29,14 @@ E-postadaki tarih, konu isimleri, referanslar ve yayın durumu, gönderilen ger�
 
 ## 3. Authentication: Basit arayüz, ciddi güvenlik
 
-İstenen deneyim **basit kayıt + giriş + çıkış + parola kurtarma veya eşdeğer güvenli hesap kurtarma + e-posta doğrulama**. Tam bir kurumsal IAM, SSO, OAuth sağlayıcıları, ekip/organizasyon hiyerarşisi **gerekmiyor**.
+İstenen MVP deneyimi **basit e-posta/parola ile kayıt + giriş + çıkış + minimum e-posta doğrulama**. Güvenli cookie ile **3 saat ömürlü token/oturum, refresh token olmadan**; süre bitince yeniden giriş. Kapsamlı parola kurtarma, oturum yenileme, SSO, OAuth, MFA, ekip hiyerarşisi ve kurumsal IAM **MVP dışıdır**.
 
 Bununla birlikte:
 
 - Parolalar düz metin saklanamaz; olgun bir parola hash yöntemi kullanılmalıdır. Kimlik doğrulamada güvenilir bileşen/standart kütüphane tercih edilmelidir.
 - Oturumlar güvenli cookie/session kurallarıyla korunmalı; hız sınırlama ve temel brute-force koruması bulunmalıdır.
 - Bir kullanıcı başka kullanıcının profiline, dergisine, e-posta adresine veya teslim kayıtlarına erişememelidir.
-- E-posta doğrulaması tamamlanmadan abonelik e-postası gönderilmez; hesap kurtarma tek kullanımlık/süreli olmalıdır.
+- E-posta doğrulaması tamamlanmadan abonelik e-postası gönderilmez. Basit süreli tek kullanımlık doğrulama bağlantısı yeterli. Kapsamlı hesap kurtarma **P0 dışındadır**.
 - Kurulum sahibi kayıt açma/kapatma veya davet kısıtı belirleyebilmelidir; aksi halde halka açık sunucuda herkes sınırsız Claude/SMTP maliyeti doğurabilir.
 - Kullanıcı **abonelikten çıkma** veya gönderimi durdurma işlemini kolayca yapabilmelidir. Zorunlu hesap işlemi mesajları ve dergi aboneliği ayrı değerlendirilmelidir.
 - API, SMTP ve oturum anahtarları tarayıcıya veya public repoya sızmaz.
@@ -84,8 +84,8 @@ Bu maddeler mantıksal ürün sınırlarıdır; fiziksel cache, storage, DB şem
 - [ ] Aynı kurulumda **iki farklı hesap** oluşturulabiliyor; hesaplara ayrı giriş yapılabiliyor.
 - [ ] Kişi A ve B için farklı konu/öncelik/bilgi seviyesi ayarları kaydedilip yüklenebiliyor.
 - [ ] A kullanıcısı B'nin tercihlerini ve özel sayılarını göremiyor.
-- [ ] En az bir gerçek araştırma **ortak analizden** iki okuyucunun içeriğinde yeniden kullanılabiliyor; tekrar Claude çağrısı oluşmadığı gösterilebiliyor.
-- [ ] Kişiye özel günlük sayı PDF ve web üzerinden açılabiliyor.
+- [ ] En az bir gerçek araştırma **ortak analizden** iki okuyucunun içeriğinde yeniden kullanılabiliyor; tekrar Claude çağrısı oluşmadığı gösterilebiliyor. **Haiku/Sonnet görev seçimi** ve düşük maliyetli kullanım görülebiliyor; Opus varsayılan kapalı.
+- [ ] Kişiye özel günlük sayı **basit web arayüzünden** ve PDF olarak açılabiliyor; tüm gönderilen içerik/PDF sürümleri saklanıyor. Yazılar için tek aktif 👍/👎 geri bildirimi kaydedilebiliyor.
 - [ ] 08:00 teslim düzeni konfigüre edilmiş ve saati beklemeden **manuel/deneme tetiklemesi** ile en az bir gerçek e-posta alındığı gösteriliyor.
 - [ ] Gönderilen e-postanın içinde okunabilir araştırma içeriği ve kaynak bağlantıları var; sayının tamamına güvenli bağlantı veriliyor.
 - [ ] Doğrulanmamış veya aboneliğini kapatmış hesaba dergi e-postası gitmiyor.
@@ -98,7 +98,7 @@ Kurumsal IAM, organizasyon/rol hiyerarşisi, ödeme, merkezi kullanıcı servisi
 
 ## 8. Henüz kullanıcı tarafından mimarisi belirlenmeyen kararlar
 
-- Kayıt akışı: e-posta/parola mı, e-posta ile şifresiz giriş mi?
+- **Kayıt yöntemi kararı:** E-posta + parola; 3 saatlik refresh edilmeyen token. Kütüphane/token biçimi ve güvenli cookie uygulaması mimari sahibine bırakılır.
 - Kayıt herkese açık mı, davetli mi, operatörün açıp kapattığı bir seçenek mi? (**Öneri:** operatör kontrollü)
 - Veritabanı ve depolama tercihleri; kullanıcı/kaynak/analiz/sayı/teslim veri sınırları.
 - E-posta çıkışı için SMTP veya sağlayıcı adapter'ı.
