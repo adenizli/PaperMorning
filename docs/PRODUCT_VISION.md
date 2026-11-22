@@ -40,7 +40,7 @@ Kullanıcı şu tercihleri tanımlayabilmelidir:
 - **Dil:** İlk demoda Türkçe okuma deneyimi esas; başka diller sonraya kalabilir.
 - **Yayın yoğunluğu:** Kısa veya ayrıntılı okuma tercihi; katı sayfa sayısı yerine yeterli bilimsel içerik.
 - **Yayın ritmi:** Hedef, kullanıcının seçtiği saat dilimine göre **her sabah 08.00'de** günlük derginin e-posta ile teslim edilmesi. Üretim bu saatten önce tamamlanır. Pazartesi uzun haftalık özel sayı, bir sonraki ürün kararıdır.
-- **Hesap ve gönderim:** Basit e-posta/parola ile kayıt ve giriş, 3 saatlik refresh edilmeyen token, minimum e-posta doğrulama ve e-posta gönderimini açma/kapama. **Kapsamlı parola kurtarma, refresh token veya ayrı auth servisi MVP kapsamında değil.** Her kullanıcının yayın arşivi diğerinden ayrıdır.
+- **Hesap ve gönderim:** Kayıtta yalnızca **kullanıcı adı, e-posta, şifre**, 3 saatlik refresh edilmeyen token, **doğrulama e-postası yok**; e-posta gönderimini tercihlerde açma/kapama. Parola kurtarma, refresh token ve ayrı auth servisi MVP kapsamında değil. Her kullanıcının yayın arşivi diğerinden ayrıdır.
 
 Tercihler kullanıcı hesabına bağlı kalır ve okuyucu her defasında yeniden seçim yapmaz. **Uygulamanın kendi kullanıcı hesabı gereklidir; merkezi bir PaperMorning bulut hesabı gerekmemelidir.**
 
@@ -116,11 +116,11 @@ Bunlar **neyle, hangi servisle veya hangi topolojiyle** yapılacağına dair tal
 - Günlük yayın **08.00'de teslim edilir**; kaynak derleme ve yazma işlerinin ne zaman tamamlanacağı mimaride belirlenir.
 - Varsayılan dergi uzunluğu ve farklı okuyucu derinliği ayarlarının UX'i.
 - Türkçe dışında ilk ek dil.
-- E-postada tam dergi içeriği ve PDF bağlantısının nasıl sunulacağı; varsayılan olarak okunabilir içerik ve güvenli tam sayı bağlantısı gereklidir.
+- E-postada okunabilir içerik, güvenli web bağlantısı ve **zorunlu tam PDF dosya eki** bir arada sunulur.
 - Kapak/görsel stratejisi: özgün çizimler, açık lisanslı görseller veya tipografik kapak.
 - Daha sonra haftalık özel sayı eklenip eklenmeyeceği.
 
-**Self-hosted çok kullanıcılı çalışma, basit ve güvenli 3 saatlik oturum, web/PDF arşivi, 👍/👎, model bazlı görev yönlendirmesi, 08.00 e-posta teslimi ve deterministik-first, bütçe duyarlı kullanım ürün gereksinimidir. Mimari, kod tabanı, model seçimi, veri erişimi, iş zamanlama aracı ve deployment teknik kararları bu belgeyle alınmamıştır.** Ayrıntılar için **[güncel Lean MVP kapsamı](LEAN_MVP_SCOPE.md)**, [çalışma ilkeleri](OPERATING_PRINCIPLES.md) ve [çok kullanıcılı e-posta gereksinimleri](MULTI_USER_EMAIL_REQUIREMENTS.md).
+**Self-hosted çok kullanıcılı çalışma, üç alanlı doğrulamasız kayıt, basit ve güvenli 3 saatlik oturum, web/PDF arşivi, 👍/👎, görev bazlı Haiku/Sonnet/istisnai Opus yönlendirmesi, 08.00 PDF EKLİ e-posta teslimi ve deterministik-first, bütçe duyarlı kullanım ürün gereksinimidir. Mimari, kod tabanı, model seçimi, veri erişimi, iş zamanlama aracı ve deployment teknik kararları bu belgeyle alınmamıştır.** Ayrıntılar için **[güncel Lean MVP kapsamı](LEAN_MVP_SCOPE.md)**, [çalışma ilkeleri](OPERATING_PRINCIPLES.md) ve [çok kullanıcılı e-posta gereksinimleri](MULTI_USER_EMAIL_REQUIREMENTS.md).
 
 ## 11. Ürün açısından taviz vermeyeceğimiz noktalar
 
