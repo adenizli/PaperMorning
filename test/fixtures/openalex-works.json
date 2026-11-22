@@ -1,0 +1,64 @@
+{
+  "results": [
+    {
+      "id": "https://openalex.org/W4400000001",
+      "doi": "https://doi.org/10.1038/S41586-026-01234-5",
+      "display_name": "Error-corrected logical qubits below threshold",
+      "authorships": [
+        { "author": { "display_name": "Ayşe Yılmaz" } },
+        { "author": { "display_name": "Jon Doe" } }
+      ],
+      "abstract_inverted_index": {
+        "We": [0],
+        "demonstrate": [1],
+        "logical": [2],
+        "qubits": [3],
+        "with": [4],
+        "error": [5],
+        "rates": [6],
+        "of": [7],
+        "0.1%.": [8]
+      },
+      "publication_date": "2026-11-18",
+      "updated_date": "2026-11-20T10:00:00",
+      "type": "article",
+      "primary_location": {
+        "landing_page_url": "https://www.nature.com/articles/s41586-026-01234-5",
+        "pdf_url": null,
+        "version": "publishedVersion",
+        "source": { "display_name": "Nature", "type": "journal" }
+      }
+    },
+    {
+      "id": "https://openalex.org/W4400000002",
+      "doi": "https://doi.org/10.48550/arxiv.2611.01234",
+      "display_name": "A preprint mirrored by OpenAlex",
+      "authorships": [],
+      "abstract_inverted_index": { "Preprint": [0], "abstract.": [1] },
+      "publication_date": "2026-11-19",
+      "updated_date": null,
+      "type": "preprint",
+      "primary_location": {
+        "landing_page_url": "https://arxiv.org/abs/2611.01234",
+        "pdf_url": "https://arxiv.org/pdf/2611.01234",
+        "version": "submittedVersion",
+        "source": { "display_name": "arXiv", "type": "repository" }
+      }
+    },
+    {
+      "id": "https://openalex.org/W4400000003",
+      "doi": null,
+      "display_name": "Conference paper with unknown review status",
+      "authorships": [],
+      "abstract_inverted_index": null,
+      "publication_date": "2026-11-17",
+      "type": "article",
+      "primary_location": {
+        "landing_page_url": null,
+        "version": null,
+        "source": { "display_name": "Workshop", "type": "conference" }
+      }
+    },
+    { "id": "https://openalex.org/W1", "display_name": "", "publication_date": "2026-11-17" }
+  ]
+}
