@@ -14,7 +14,7 @@ Sistem **self-hosted-first** kalır: kullanıcılar uygulamayı kendi bilgisayar
 
 ## 2. Kullanıcı akışı (minimum)
 
-1. Okur e-posta adresiyle **kayıt olur**; hesabını doğrular ve güvenli biçimde giriş yapar.
+1. Okur **kullanıcı adı, e-posta, şifre** ile kayıt olur; **e-posta doğrulaması olmadan** güvenli biçimde giriş yapar.
 2. Her bir konu için **öncelik** (yüksek/orta/düşük) ve **mevcut bilgi seviyesi** (başlangıç/orta/ileri) ayarlar.
 3. Yayın dili, saat dilimi ve e-posta alma tercihini kaydeder. **Varsayılan teslim: her gün 08:00, kullanıcının yerel saat diliminde.**
 4. Uygulama makaleleri toplar, değerlendirir ve içerikleri oluşturur; gerekirse Claude API kullanır.
@@ -23,20 +23,20 @@ Sistem **self-hosted-first** kalır: kullanıcılar uygulamayı kendi bilgisayar
 
 ### E-posta deneyimi
 
-E-posta yalnızca 'Derginiz hazır' diyen boş bildirim **olmamalıdır**. Sayının sonundaki **Ufuk Raporu** bölümünden en değerli bir akademik veya sektörel öneriyi kısa bir ön izleme olarak göstermeli ve tam bölüme bağlanmalıdır. Kullanıcı **e-postanın içinde gerçek okunabilir içerik** görebilmelidir (en azından editoryal özetler ve ana haberler, çalışmalara kaynak bağlantıları). Tam sayı ve sayfa düzenli PDF için güvenli bağlantı sunulur. PDF ek dosya olarak gönderim, alıcı limitleri ve teslim edilebilirlik göz önünde bulundurularak daha sonra seçilebilir; **zorunlu** değildir.
+E-posta yalnızca 'Derginiz hazır' diyen boş bildirim **olmamalıdır**. Sayının sonundaki **Ufuk Raporu** bölümünden en değerli bir akademik veya sektörel öneriyi kısa bir ön izleme olarak göstermeli ve tam bölüme bağlanmalıdır. Kullanıcı **e-postanın içinde gerçek okunabilir içerik** görebilmelidir (en azından editoryal özetler ve ana haberler, çalışmalara kaynak bağlantıları). Tam sayı ve sayfa düzenli PDF için güvenli bağlantı da sunulur. **Aynı kişisel PDF, e-postaya mutlaka dosya eki olarak eklenir.** E-posta eki boyut sınırı aşılırsa gerçek gönderim başarısız sayılır; yalnızca bağlantı gönderimi yeterli kabul edilmez.
 
 E-postadaki tarih, konu isimleri, referanslar ve yayın durumu, gönderilen gerçek sayıyla eşleşir.
 
 ## 3. Authentication: Basit arayüz, ciddi güvenlik
 
-İstenen MVP deneyimi **basit e-posta/parola ile kayıt + giriş + çıkış + minimum e-posta doğrulama**. Güvenli cookie ile **3 saat ömürlü token/oturum, refresh token olmadan**; süre bitince yeniden giriş. Kapsamlı parola kurtarma, oturum yenileme, SSO, OAuth, MFA, ekip hiyerarşisi ve kurumsal IAM **MVP dışıdır**.
+İstenen MVP deneyimi **yalnızca kullanıcı adı + e-posta + şifre alanlarıyla kayıt**, e-posta veya kullanıcı adıyla giriş ve çıkıştır. **E-posta doğrulaması kesinlikle YOKTUR.** Güvenli cookie ile **3 saat ömürlü token/oturum, refresh token olmadan**; süre bitince yeniden giriş. Parola kurtarma, oturum yenileme, SSO, OAuth, MFA, ekip hiyerarşisi ve kurumsal IAM **MVP dışıdır**.
 
 Bununla birlikte:
 
 - Parolalar düz metin saklanamaz; olgun bir parola hash yöntemi kullanılmalıdır. Kimlik doğrulamada güvenilir bileşen/standart kütüphane tercih edilmelidir.
 - Oturumlar güvenli cookie/session kurallarıyla korunmalı; hız sınırlama ve temel brute-force koruması bulunmalıdır.
 - Bir kullanıcı başka kullanıcının profiline, dergisine, e-posta adresine veya teslim kayıtlarına erişememelidir.
-- E-posta doğrulaması tamamlanmadan abonelik e-postası gönderilmez. Basit süreli tek kullanımlık doğrulama bağlantısı yeterli. Kapsamlı hesap kurtarma **P0 dışındadır**.
+- **Doğrulama e-postası, e-posta doğrulama tokenı, doğrulama endpoint'i ve verified-at alanı oluşturulmaz.** Günlük e-posta, yeni kullanıcıya varsayılan olarak başlamaz; kullanıcı tercihler ekranında gönderimi açıkça açar. Yanlış veya başka birine ait adrese abonelik açılması tamamen engellenemez; kayıt ve gönderime temel hız/kota sınırı ve abonelikten çıkma imkânı konur.
 - Kurulum sahibi kayıt açma/kapatma veya davet kısıtı belirleyebilmelidir; aksi halde halka açık sunucuda herkes sınırsız Claude/SMTP maliyeti doğurabilir.
 - Kullanıcı **abonelikten çıkma** veya gönderimi durdurma işlemini kolayca yapabilmelidir. Zorunlu hesap işlemi mesajları ve dergi aboneliği ayrı değerlendirilmelidir.
 - API, SMTP ve oturum anahtarları tarayıcıya veya public repoya sızmaz.
@@ -67,7 +67,7 @@ Bu maddeler mantıksal ürün sınırlarıdır; fiziksel cache, storage, DB şem
 - Gönderim durumları (hazırlanıyor/hazır/gönderildi/başarısız/yeniden denenecek) denetlenebilir olmalıdır.
 - E-posta altyapısı geçici hata verirse sınırlı yeniden deneme uygulanır ve durum kaydedilir; idempotent davranış hedeflenir. Uzak e-posta sağlayıcısının teslimi kesin olarak garantilenemez.
 - 08:00'e yetişilemeyecekse, eski sayı o güne aitmiş gibi gönderilmez. Geciken yayın için görünür bir durum oluşur; gecikme mesajı veya ertelenmiş gönderim davranışı mimaride kararlaştırılır.
-- Kullanıcı aboneliği kapalı veya e-posta adresi doğrulanmamışsa düzenli dergi e-postası gönderilmez.
+- Kullanıcı günlük e-posta aboneliğini **açıkça etkinleştirmemişse** veya kapatmışsa düzenli dergi e-postası gönderilmez. Kayıt olurken e-posta doğrulama kontrolü yapılmaz.
 - Self-hosted makine uyku/kapalı ve çalışmıyorsa kesin 08:00 gönderimi garanti edilemez; güvenilirlik için sürekli açık ortam gerekliliği kurulum belgelerinde belirtilir.
 
 ## 6. Güvenlik, mahremiyet ve operatör maliyeti
@@ -87,8 +87,8 @@ Bu maddeler mantıksal ürün sınırlarıdır; fiziksel cache, storage, DB şem
 - [ ] En az bir gerçek araştırma **ortak analizden** iki okuyucunun içeriğinde yeniden kullanılabiliyor; tekrar Claude çağrısı oluşmadığı gösterilebiliyor. **Haiku/Sonnet görev seçimi** ve düşük maliyetli kullanım görülebiliyor; Opus varsayılan kapalı.
 - [ ] Kişiye özel günlük sayı **basit web arayüzünden** ve PDF olarak açılabiliyor; tüm gönderilen içerik/PDF sürümleri saklanıyor. Yazılar için tek aktif 👍/👎 geri bildirimi kaydedilebiliyor.
 - [ ] 08:00 teslim düzeni konfigüre edilmiş ve saati beklemeden **manuel/deneme tetiklemesi** ile en az bir gerçek e-posta alındığı gösteriliyor.
-- [ ] Gönderilen e-postanın içinde okunabilir araştırma içeriği ve kaynak bağlantıları var; sayının tamamına güvenli bağlantı veriliyor.
-- [ ] Doğrulanmamış veya aboneliğini kapatmış hesaba dergi e-postası gitmiyor.
+- [ ] Gönderilen e-postanın içinde okunabilir araştırma içeriği ve kaynak bağlantıları var; **gerçek PDF dosyası ekli** ve sayının tamamına güvenli bağlantı da veriliyor.
+- [ ] E-posta aboneliğini açmamış veya kapatmış hesaba günlük dergi gönderilmiyor; **e-posta doğrulama akışı bulunmuyor**.
 - [ ] Kurulum sahibi anahtarlarını ve dışa açık hesap sınırlarını kontrol edebiliyor.
 - [ ] E-posta API sağlayıcısı ve Claude erişimi gibi dış bağımlılıkları gösteride açıkça belirtebiliyoruz.
 
@@ -98,7 +98,7 @@ Kurumsal IAM, organizasyon/rol hiyerarşisi, ödeme, merkezi kullanıcı servisi
 
 ## 8. Henüz kullanıcı tarafından mimarisi belirlenmeyen kararlar
 
-- **Kayıt yöntemi kararı:** E-posta + parola; 3 saatlik refresh edilmeyen token. Kütüphane/token biçimi ve güvenli cookie uygulaması mimari sahibine bırakılır.
+- **Kayıt yöntemi kararı:** Kullanıcı adı + e-posta + şifre; 3 saatlik refresh edilmeyen token, doğrulama e-postası yok. Kütüphane/token biçimi ve güvenli cookie uygulaması mimari sahibine bırakılır.
 - Kayıt herkese açık mı, davetli mi, operatörün açıp kapattığı bir seçenek mi? (**Öneri:** operatör kontrollü)
 - Veritabanı ve depolama tercihleri; kullanıcı/kaynak/analiz/sayı/teslim veri sınırları.
 - E-posta çıkışı için SMTP veya sağlayıcı adapter'ı.
