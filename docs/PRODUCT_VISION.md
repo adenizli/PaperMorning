@@ -6,7 +6,7 @@
 
 ## 1. Bir cümlelik ürün
 
-**PaperMorning**, kullanıcının seçtiği bilim ve teknoloji alanlarında yeni akademik araştırmaları takip eden; öne çıkan bulguları önem ve güvenilirliğe göre seçen; bunları **her sabah kişiselleştirilmiş, kaynaklı ve dergi tasarımına sahip bir yayın** olarak okura sunan ürün fikridir.
+**PaperMorning**, aynı self-hosted kurulumda kayıtlı birden fazla kullanıcının seçtiği bilim ve teknoloji alanlarında yeni akademik araştırmaları takip eden; ortak makale analizini yeniden kullanarak her okuyucuya özel, kaynaklı bilim dergisini **her sabah kullanıcının yerel saat diliminde 08.00'de e-posta olarak gönderen** ürün fikridir.
 
 Amaç makaleleri özetlemek değil; **okurun bilim dünyasında ne değiştiğini anlayabileceği bir editoryal yayın** üretmektir.
 
@@ -28,7 +28,7 @@ Okur teknik bir konunun uzmanı değilse yazıyı anlayabilmeli. Konuyu bilen bi
 
 **İlk aşamada:** Birden fazla araştırma alanını merak eden, tüm makaleleri tek tek takip etmeye zamanı olmayan teknik meraklı / öğrenci / araştırmacı. PaperMorning merkezî hizmete bağlı olmak yerine, kullanıcıların kendi bilgisayarında veya kendi seçtiği sunucuda barındırabileceği bir uygulamadır.
 
-Daha geniş bir kitleye açılabilme hedefi olabilir; fakat **çok kullanıcılı SaaS, satış, üyelik, ödeme** bu demodaki temel problem değildir.
+**Bir self-hosted kurulum içinde birden fazla okuyucu hesabı ve kişisel e-posta aboneliği MVP kapsamındadır.** Merkezi olarak işletilen SaaS, ödeme ve satış MVP kapsamında değildir.
 
 ## 4. Kullanıcı tercihleri — ürün düzeyi
 
@@ -39,9 +39,10 @@ Kullanıcı şu tercihleri tanımlayabilmelidir:
 - **Bilgi seviyesi:** Kullanıcı her konu için başlangıç / orta / ileri düzeyde kendi mevcut bilgisini seçer. Yazının varsaydığı ön bilgi ve terim açıklamaları buna göre ayarlanır. **Bilgi seviyesi ile ayrıca istenebilecek teknik detay miktarı karıştırılmaz.** İkinci tercih ileride bağımsız sunulabilir.
 - **Dil:** İlk demoda Türkçe okuma deneyimi esas; başka diller sonraya kalabilir.
 - **Yayın yoğunluğu:** Kısa veya ayrıntılı okuma tercihi; katı sayfa sayısı yerine yeterli bilimsel içerik.
-- **Yayın ritmi:** Hedef, kullanıcının seçtiği yerel saatte ve zaman diliminde, her sabah yeni sayı. Pazartesi uzun haftalık özel sayı, bir sonraki ürün kararıdır.
+- **Yayın ritmi:** Hedef, kullanıcının seçtiği saat dilimine göre **her sabah 08.00'de** günlük derginin e-posta ile teslim edilmesi. Üretim bu saatten önce tamamlanır. Pazartesi uzun haftalık özel sayı, bir sonraki ürün kararıdır.
+- **Hesap ve gönderim:** Kayıt, giriş, e-posta doğrulama, güvenli hesap kurtarma ve e-posta aboneliği yönetimi. Her kullanıcının yayın arşivi diğerinden ayrıdır.
 
-Tercihler kaybolmamalı; okuyucu sonraki yayında tekrar seçim yapmak zorunda kalmamalıdır. Bu, belli bir kimlik sistemi seçildiği anlamına **gelmez**. İlk kurulum için bulut hesabı zorunlu değildir.
+Tercihler kullanıcı hesabına bağlı kalır ve okuyucu her defasında yeniden seçim yapmaz. **Uygulamanın kendi kullanıcı hesabı gereklidir; merkezi bir PaperMorning bulut hesabı gerekmemelidir.**
 
 ## 5. Günlük sayının ürün davranışı
 
@@ -51,7 +52,7 @@ Tercihler kaybolmamalı; okuyucu sonraki yayında tekrar seçim yapmak zorunda k
 4. Önemli bulgu yoksa sırf sayfa doldurmak için içerik uydurulmaz.
 5. Önceki sayılarda ele alınmış çalışmalar sebepsiz tekrar edilmez; anlamlı güncelleme varsa açıkça belirtilir.
 6. Okur kaynak ve makale sayfasına gidebilir.
-7. Ortaya **yayınlanmış, tarihli, geri dönüp okunabilen bir sayı** çıkar.
+7. Ortaya **yayınlanmış, tarihli, geri dönüp okunabilen ve sabah 08.00'de e-posta olarak gönderilen kişiye özel bir sayı** çıkar. Aynı kaynakların akademik analizi farklı kullanıcılarda yeniden kullanılabilir.
 8. **Claude API, yalnızca semantik değerlendirme, bilimsel yorumlama ve okurun bilgi birikimine göre yazma gibi gerçek dil/anlam işleri için kullanılır.** Gereksiz çağrılar azaltılır; harcama ve hata davranışı görünür olur.
 
 **Günlük sayı**: Başlangıç tasarım hedefi yaklaşık **5–8 sayfa**; bu bir kota değil.  
@@ -81,33 +82,34 @@ Okuyucunun dergi sonrasında cevaplayabilmesi gereken sorular:
 
 ## 8. Salı demosunda zorunlu ürün kapsamı
 
-- En az iki farklı araştırma alanı seçimi, her biri için **ayrı öncelik ve bilgi seviyesi** ve tercihlerin korunması.
+- **İki ayrı kullanıcı hesabıyla** kayıt, giriş ve özel tercihlerin birbirinden ayrılması; en az iki araştırma alanı seçimi, her biri için **ayrı öncelik ve bilgi seviyesi** ve tercihlerin korunması.
 - Gerçek, güncel, referanslanabilir araştırmalardan üretilmiş **bir örnek sayı**.
 - Kapak, içindekiler, en az bir derin dosya, kısa bölümler, kaynaklar.
 - Kaynak/makale iddialarının izlenebilirliği; preprint işaretleri.
 - Okunabilir sayfa düzeni ve **PDF olarak erişilebilir yayın**.
 - Yayını yeniden oluşturmayı / yeni sayı oluşturmayı gösterebilen bir kullanım yolu.
-- Kullanıcının belirlediği saat/zaman diliminde her sabah yayın hedefi için **hazırlanmış ve doğrulanabilir otomatik çalışma davranışı**.
+- Kullanıcının kendi zaman diliminde **08.00'de** gerçek e-posta teslim hedefi için **hazırlanmış ve doğrulanabilir otomatik çalışma davranışı**, manuel test gönderimi ve gönderim durumu.
 - **Tek kurulumda self-hosting deneyimi** ve **deterministik işlerde gereksiz Claude API kullanımı yapılmadığının** gösterimi.
 - Kurulum sahibinin bilgisayarında veya seçtiği sunucuda çalışan, **canlı etkileşimle gösterilebilir** bir uygulama; yalnızca kayıtlı video yeterli değil.
 - Kullanıcının kod yazmasını gerektirmeyen işletim / inceleme deneyimi.
+- Ortak makalenin analizinin kullanıcılar arasında yeniden kullanıldığının, iki farklı kişisel sayı ve gerçek e-posta gönderiminin gösterilmesi.
 
 Bunlar **neyle, hangi servisle veya hangi topolojiyle** yapılacağına dair talimat değildir.
 
 ## 9. Bilinçli olarak kapsam dışı
 
-İlk demoda şart olmayanlar: herkese açık üyelik, sosyal özellikler, ödeme, mobil uygulama, karmaşık abonelik yönetimi, haftalık özel baskı, çok dilli tam destek, sınırsız araştırma alanı, makalenin PDF tam metnine erişilemediği halde tam metin analizi iddiası.
+İlk demoda şart olmayanlar: herkese **sınırsız açık kayıt**, kurumsal IAM/SSO, sosyal özellikler, ödeme, mobil uygulama, karmaşık abonelik planları, haftalık özel baskı, çok dilli tam destek, sınırsız araştırma alanı, makalenin PDF tam metnine erişilemediği halde tam metin analizi iddiası.
 
 ## 10. Ürün kararları — henüz kilitlenmeyenler
 
-- Günlük yayının **varsayılan** kaçta hazır olacağı; kullanıcının saat/zaman dilimi ayarından bağımsız değerlendirilir.
+- Günlük yayın **08.00'de teslim edilir**; kaynak derleme ve yazma işlerinin ne zaman tamamlanacağı mimaride belirlenir.
 - Varsayılan dergi uzunluğu ve farklı okuyucu derinliği ayarlarının UX'i.
 - Türkçe dışında ilk ek dil.
-- Günlük sayıların okuyucuya nasıl haber verileceği (site, e-posta, vb.).
+- E-postada tam dergi içeriği ve PDF bağlantısının nasıl sunulacağı; varsayılan olarak okunabilir içerik ve güvenli tam sayı bağlantısı gereklidir.
 - Kapak/görsel stratejisi: özgün çizimler, açık lisanslı görseller veya tipografik kapak.
 - Daha sonra haftalık özel sayı eklenip eklenmeyeceği.
 
-**Self-hosted çalışma ve deterministik-first, bütçe duyarlı kullanım ürün gereksinimidir. Mimari, kod tabanı, model seçimi, veri erişimi, iş zamanlama aracı ve deployment teknik kararları bu belgeyle alınmamıştır.** Ayrıntılar için [çalışma ilkeleri](OPERATING_PRINCIPLES.md).
+**Self-hosted çok kullanıcılı çalışma, güvenli hesaplar, 08.00 e-posta teslimi ve deterministik-first, bütçe duyarlı kullanım ürün gereksinimidir. Mimari, kod tabanı, model seçimi, veri erişimi, iş zamanlama aracı ve deployment teknik kararları bu belgeyle alınmamıştır.** Ayrıntılar için [çalışma ilkeleri](OPERATING_PRINCIPLES.md) ve [çok kullanıcılı e-posta gereksinimleri](MULTI_USER_EMAIL_REQUIREMENTS.md).
 
 ## 11. Ürün açısından taviz vermeyeceğimiz noktalar
 
