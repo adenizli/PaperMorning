@@ -23,7 +23,7 @@ Sistem **self-hosted-first** kalır: kullanıcılar uygulamayı kendi bilgisayar
 
 ### E-posta deneyimi
 
-E-posta yalnızca 'Derginiz hazır' diyen boş bildirim **olmamalıdır**. Kullanıcı **e-postanın içinde gerçek okunabilir içerik** görebilmelidir (en azından editoryal özetler ve ana haberler, çalışmalara kaynak bağlantıları). Tam sayı ve sayfa düzenli PDF için güvenli bağlantı sunulur. PDF ek dosya olarak gönderim, alıcı limitleri ve teslim edilebilirlik göz önünde bulundurularak daha sonra seçilebilir; **zorunlu** değildir.
+E-posta yalnızca 'Derginiz hazır' diyen boş bildirim **olmamalıdır**. Sayının sonundaki **Ufuk Raporu** bölümünden en değerli bir akademik veya sektörel öneriyi kısa bir ön izleme olarak göstermeli ve tam bölüme bağlanmalıdır. Kullanıcı **e-postanın içinde gerçek okunabilir içerik** görebilmelidir (en azından editoryal özetler ve ana haberler, çalışmalara kaynak bağlantıları). Tam sayı ve sayfa düzenli PDF için güvenli bağlantı sunulur. PDF ek dosya olarak gönderim, alıcı limitleri ve teslim edilebilirlik göz önünde bulundurularak daha sonra seçilebilir; **zorunlu** değildir.
 
 E-postadaki tarih, konu isimleri, referanslar ve yayın durumu, gönderilen gerçek sayıyla eşleşir.
 
