@@ -86,10 +86,7 @@ server/src/
     domain.module.ts
     account/
     research/
-    editorial/
     publication/
-    delivery/
-    feedback/
 server/test/
   unit/
   integration/
@@ -104,11 +101,11 @@ client/
 **Approved domain boundaries (owner decisions, 2026-11-22):**
 - **ResearchModule**: five domain models (`PaperModel`, `PaperVersionModel`, `PaperScreeningModel`, `PaperAnalysisModel`, `ResearchRunModel`). Its work is independent of individual user accounts: academic discovery, deduplication, versioned provenance, optional Haiku screening, cached Sonnet scientific analysis, public research query service. It does **not** produce personal publications, article variants, PDFs or email. Implementation task: [P0-01](https://github.com/adenizli/PaperMorning/issues/2).
 - **AccountModule**: three domain models (`UserModel`, `ReaderPreferenceModel`, `TopicPreferenceModel`) and two domain services (`AccountService`, `PreferenceService`), plus minimal auth in `src/core/auth/`. Exactly three registration inputs; no verification email; 3h unrefreshed authentication. Account never imports Research; Publication will access preferences through the public service. Implementation task: [P0-02](https://github.com/adenizli/PaperMorning/issues/3).
-- **PublicationModule**: high-level boundary agreed (personal selection/writing, Ufuk Raporu, PDF/archive, delivery, feedback), but **internal models and subservices remain pending owner review**. Do not implement it from this architecture document alone.
+- **PublicationModule**: owner-approved single domain module for personal selection/writing, structured closing Ufuk Raporu, immutable web/PDF issue snapshot and archive, delivery state and feedback. **Five persistent models:** `ArticleVariantModel`, `IssueModel`, `PublicationRunModel`, `EmailDeliveryModel`, `FeedbackModel`. **Two nested non-table models:** `IssueContentModel` and `OutlookReportModel` (inside issue JSONB). **Six domain services:** `PublicationService`, `EditorialService`, `ArticleWritingService`, `OutlookService`, `IssueService`, `DeliveryService`. Feedback write can live in IssueService for MVP. **No separate** EditorialModule, DeliveryModule or FeedbackModule. Implementation task: [P0-03](https://github.com/adenizli/PaperMorning/issues/4). PDF rendering, SMTP transport and scheduler live behind independently defined integration adapters/tick rather than in this domain.
 
-**Note:** The six domain names in the representative folder tree above are historical candidates only. For the current approved lean scope, implement `account/`, `research/` and—after further design approval—`publication/`. Do not create `editorial/`, `delivery/` or `feedback/` as separate domain modules by default.
+**Note:** The six domain names in the representative folder tree above are historical candidates only. For the current approved lean scope, implement `account/`, `research/` and `publication/`. Do not create `editorial/`, `delivery/` or `feedback/` as separate domain modules by default.
 
-**Sequential GitHub task order:** [P0-00 foundation](https://github.com/adenizli/PaperMorning/issues/1) → [P0-01 Research](https://github.com/adenizli/PaperMorning/issues/2) → [P0-02 Account](https://github.com/adenizli/PaperMorning/issues/3). Each task gets a focused branch/PR and real test results; no automatic merge. Issue creation itself does not start an autonomous coding agent.
+**Sequential GitHub task order:** [P0-00 foundation](https://github.com/adenizli/PaperMorning/issues/1) → [P0-01 Research](https://github.com/adenizli/PaperMorning/issues/2) → [P0-02 Account](https://github.com/adenizli/PaperMorning/issues/3) → [P0-03 Publication](https://github.com/adenizli/PaperMorning/issues/4). Each task gets a focused branch/PR and real test results; no automatic merge. Issue creation itself does not start an autonomous coding agent.
 
 ## 5. Daily research pipeline (single process)
 
@@ -182,4 +179,4 @@ PUT    /api/issues/:id/feedback/:contentKey
 
 Identity verification, password recovery emails, refresh token, multi-device session management, enterprise IAM/SSO, billing, multi-tenant company hierarchies, vector embeddings, a learning recommendation algorithm, Redis/queue clusters, Kubernetes, complex observability, and advanced multi-server operations.
 
-**Implementation workflow:** First get one end-to-end real issue + PDF + actual email working; then add the second account, shared cache validation, thumbs feedback and desktop packaging. **Do not claim implementation complete until code actually runs and is tested.** Specific domain submodules, PDF engine and mail adapter can be decided in the next architecture discussion.
+**Implementation workflow:** First get one end-to-end real issue + PDF + actual email working; then add the second account, shared cache validation, thumbs feedback and desktop packaging. **Do not claim implementation complete until code actually runs and is tested.** All three domain module boundaries are now approved; specific PDF renderer, SMTP transport and core scheduler integration remain follow-up tasks. Avoid implementing those provider-level decisions implicitly inside Publication.
