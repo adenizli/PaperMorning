@@ -105,7 +105,13 @@ client/
 
 **Note:** The six domain names in the representative folder tree above are historical candidates only. For the current approved lean scope, implement `account/`, `research/` and `publication/`. Do not create `editorial/`, `delivery/` or `feedback/` as separate domain modules by default.
 
-**Sequential GitHub task order:** [P0-00 foundation](https://github.com/adenizli/PaperMorning/issues/1) → [P0-01 Research](https://github.com/adenizli/PaperMorning/issues/2) → [P0-02 Account](https://github.com/adenizli/PaperMorning/issues/3) → [P0-03 Publication](https://github.com/adenizli/PaperMorning/issues/4). Each task gets a focused branch/PR and real test results; no automatic merge. Issue creation itself does not start an autonomous coding agent.
+**GitHub implementation sequence:** [P0-00 foundation](https://github.com/adenizli/PaperMorning/issues/1) → [P0-01 Research](https://github.com/adenizli/PaperMorning/issues/2) → [P0-02 Account](https://github.com/adenizli/PaperMorning/issues/3) → [P0-03 Publication](https://github.com/adenizli/PaperMorning/issues/4) → [P0-04 PDF/storage](https://github.com/adenizli/PaperMorning/issues/5) → [P0-05 SMTP](https://github.com/adenizli/PaperMorning/issues/6) → [P0-06 scheduler](https://github.com/adenizli/PaperMorning/issues/7). Tasks may be parallelized only after their public contract dependencies are ready. Each gets a focused branch/PR and real tests; no automatic merge. Opening issues does **not** start an autonomous coding agent.
+
+**Approved integration choices (2026-11-22):**
+- **PDF:** server-side Playwright/Chromium headless HTML-to-PDF, print stylesheet, Turkish/Unicode typography, source links, actual PDF bytes, no LLM and no frontend rendering dependency. Private atomic filesystem storage and authorization-checked download via IssueService. The PDF and web view reflect the **same immutable JSONB Issue snapshot**.
+- **Mail:** self-hosted configurable Nodemailer/SMTP adapter, readable text/HTML digest + science links + Ufuk teaser + **mandatory personalized PDF attachment**, not a URL-only notification. Strict opt-in, safe retry, delivery record. Unknown SMTP acceptance stays UNKNOWN rather than automatic resend.
+- **Scheduling:** single-process `@nestjs/schedule` minute polling, reader-local 06:00 preparation target and 08:00 delivery. IANA timezone conversion, persisted checkpoints, unique issue and delivery constraints, controlled late behavior and an operator-only manual test trigger; offline server cannot promise exact delivery.
+- These are **integration/core components**, not additional domain modules. Module count remains three: Research, Account, Publication.
 
 ## 5. Daily research pipeline (single process)
 
@@ -179,4 +185,4 @@ PUT    /api/issues/:id/feedback/:contentKey
 
 Identity verification, password recovery emails, refresh token, multi-device session management, enterprise IAM/SSO, billing, multi-tenant company hierarchies, vector embeddings, a learning recommendation algorithm, Redis/queue clusters, Kubernetes, complex observability, and advanced multi-server operations.
 
-**Implementation workflow:** First get one end-to-end real issue + PDF + actual email working; then add the second account, shared cache validation, thumbs feedback and desktop packaging. **Do not claim implementation complete until code actually runs and is tested.** All three domain module boundaries are now approved; specific PDF renderer, SMTP transport and core scheduler integration remain follow-up tasks. Avoid implementing those provider-level decisions implicitly inside Publication.
+**Implementation workflow:** First get one end-to-end real issue + PDF + actual email working; then add the second account, shared cache validation, thumbs feedback and desktop packaging. **Do not claim implementation complete until code actually runs and is tested.** All three domain module boundaries are approved, and PDF, SMTP and scheduler have implementation tickets with explicit adapter boundaries. Claude Code must implement only the relevant ticket, verify with real tests, open PRs and avoid automatic merge.
