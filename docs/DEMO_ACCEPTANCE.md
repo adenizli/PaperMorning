@@ -35,6 +35,8 @@ Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığ
 - [ ] Kullanıcı **web arayüzünde yazıları okuyabiliyor**, PDF açabiliyor/indirebiliyor, daha önce gönderilen PDF ve içerikler kalıcı arşivde korunuyor.
 - [ ] Kullanıcı bir yazıya 👍 veya 👎 bırakabiliyor ve oyunu değiştirebiliyor.
 - [ ] Daha sonra yeniden açılabilen bir sayı mevcut.
+- [ ] **En sonda Ufuk Raporu** var: en az iki makaleyi birlikte ele alarak (mümkünse) bir akademik araştırma hipotezi/ilk deney, bir sektörel pilot/ilk ölçüm ve gelişim belirsizliğini açıklıyor. Kaynak bulgusu ile yorum ayrı; kanıt yoksa uydurmak yerine sınır belirtiliyor.
+- [ ] Ufuk Raporu web/PDF arşivinde korunuyor, e-postadan açılıyor, 👍/👎 verilebiliyor.
 
 ### B4. Tekrar üretilebilirlik
 - [ ] Bir sayı oluşturma işlemi kullanıcı tarafından demoda başlatılabiliyor veya denetlenebiliyor.
@@ -124,5 +126,6 @@ Bir demo ancak şu dört soruya **evet** diyebildiğimizde kabul edilir:
 2. "Başka biri yayını açınca onu bir dergi olarak okuyabiliyor mu?"
 3. "Bugün başka kaynaklar geldiğinde yeni bir sayı üretebiliyor muyuz?"
 4. "Her sabah yayımlanacağı iddiasının gerçekten çalışacağını gösteren kanıtımız var mı?"
+5. "Ufuk Raporu gerçekten bu makalelerden yeni bir araştırma sorusu ve denenebilir uygulama önerisi çıkarıyor mu; kanıtla hipotezi ayırıyor mu?"
 
 **Özet:** Süslenmiş statik PDF, MVP'nin tamamlandığı anlamına gelmez. Çalışan makale işleme ama bozuk sayfa düzeni de tamamlanmış bir PaperMorning değildir.
