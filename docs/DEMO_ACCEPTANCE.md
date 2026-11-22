@@ -5,7 +5,7 @@
 
 ## A. Gösteride anlatacağımız hikâye
 
-"PaperMorning'a ilgi alanlarımı söylüyorum. Her sabah, bilimsel kaynaklardan seçilmiş güncel araştırmalar hakkında bana özel bir dergi hazırlanıyor. Yalnızca başlık atmıyor; araştırmanın neden önemli olduğunu, neyi kanıtladığını ve neyi kanıtlamadığını açıklıyor. Orijinal çalışmaları açabiliyor, dergiyi PDF olarak okuyabiliyorum."
+"PaperMorning'a kayıt olup ilgi alanlarımı söylüyorum. Her sabah saat 08.00'de, bilimsel kaynaklardan seçilmiş güncel araştırmalar hakkında bana özel bir dergi e-postası geliyor. Yalnızca başlık atmıyor; araştırmanın neden önemli olduğunu, neyi kanıtladığını ve neyi kanıtlamadığını açıklıyor. Orijinal çalışmaları açabiliyor, dergiyi PDF olarak okuyabiliyorum."
 
 Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığı olan, düzenli yayımlanan somut ürün.**
 
@@ -15,7 +15,8 @@ Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığ
 - [ ] En az iki araştırma ilgi alanı belirlenebiliyor.
 - [ ] Alan **önceliği** ve kullanıcının o alandaki **bilgi seviyesi** ayrı ayrı, anlaşılır biçimde seçilebiliyor.
 - [ ] Tercihler kaydedilip tekrar açıldığında korunuyor.
-- [ ] Üyelik sistemi veya birden çok kullanıcı **şart değil**.
+- [ ] Aynı kurulumda **iki hesap** açılıp güvenli giriş yapılabiliyor; e-posta adresleri doğrulanabiliyor ve hesap kurtarma yolu mevcut.
+- [ ] Kullanıcıların tercihleri, yayınları ve abonelik ayarları birbirinden izole.
 
 ### B2. Gerçek veriyle içerik
 - [ ] Gerçek, tarihlenebilir bilimsel çalışmalardan en az **üç** özgün kaynak kullanılmış.
@@ -39,10 +40,11 @@ Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığ
 - [ ] Oluşturulan çıktı sadece önceden elle yazılmış sabit demo içeriği değil; gerçek kaynaklardan yeniden sayı üretilebiliyor.
 - [ ] Hata olursa kullanıcıya ya da operatöre başarısızlık belli oluyor; eski sayı "bugün yayımlandı" diye sunulmuyor.
 - [ ] Aynı günlük sayı birden çok kez istemeden çoğaltılmıyor.
-- [ ] Salı günü kullanıcının belirlediği saat ve zaman dilimiyle otomatik çalışma hazırlanmış, tetiklenebilir ve nasıl doğrulandığı gösterilebilir durumda. Ertesi sabahı beklemeden canlı deneme veya kayıtlarla kanıt sunulmalı.
+- [ ] Salı günü farklı kullanıcıların zaman dilimleri dikkate alınarak **08.00 teslim hedefi** için otomatik çalışma hazırlanmış; beklemeden test edilip gerçek e-posta alınabiliyor. Ertesi sabahı beklemeden canlı deneme veya kayıtlarla kanıt sunulmalı.
 
 ### B5. Gösterilebilir self-hosted çalışma
 - [ ] Uygulama, kurulum sahibinin bilgisayarında veya onun seçtiği sunucuda çalışıyor; geliştiricinin işlettiği merkezi SaaS'a bağımlı değil.
+- [ ] İki hesap farklı kişisel sayılar görüyor; paylaşılan bir kaynağın bilimsel analizi gereksiz tekrar Claude çağrısı olmadan yeniden kullanılabiliyor.
 - [ ] Proje sahibi ve demo katılımcıları canlı bir kurulum üzerinden yayını görebiliyor (gerekirse sahibinin ekranından).
 - [ ] Bir uygulama hatası / eksik izin demoyu tamamen durdurmuyor; en azından son başarılı sayı görülebiliyor ve tarihi açık.
 - [ ] API anahtarları, gizli bilgiler veya özel kullanıcı verileri ekran görüntüsüne, repoya veya kullanıcı arayüzüne sızmıyor.
@@ -50,10 +52,12 @@ Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığ
 - [ ] Deterministik işlemler gereksiz Claude API çağrısı oluşturmuyor; çağrı sayısı ve maliyeti görülebiliyor.
 - [ ] Yeniden deneme sırasında aynı işin gereksiz tekrar faturalandırılması ve çift sayı yayımlanması önleniyor.
 - [ ] Yerel bilgisayar uyku/kapalıysa zamanlanmış işin otomatik çalışmasının garanti edilmediği kullanıcıya açık.
+- [ ] Aboneliği kapalı veya doğrulanmamış hesaba günlük dergi gönderilmiyor; gönderim durumu izlenebiliyor.
+- [ ] E-postanın içinde gerçekten okunabilir araştırma içeriği, kaynak linkleri ve tam sayıya güvenli erişim bulunuyor.
 
 ## C. Güçlü ama salı için bloklayıcı olmayanlar (P1)
 
-- [ ] Kullanıcıya yeni sayı bildirimi.
+- [ ] İsteğe bağlı SMS/push bildirimi (günlük e-posta artık P0).
 - [ ] Daha uzun pazartesi özel sayısı.
 - [ ] Geçmiş sayıları tarih veya konuya göre filtreleyebilme.
 - [ ] Bilgi seviyesinden bağımsız **teknik detay tercihi** ve daha rafine kişiselleştirme.
@@ -65,11 +69,11 @@ Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığ
 ## D. Örnek salı demo akışı (5–7 dakika)
 
 1. **30 saniye — Problem:** "Çok fazla makale var; ama hangi çalışma gerçekten yeni, bunu anlamak zor."
-2. **60 saniye — İlgi alanları:** İki alan ve her biri için farklı **bilgi seviyesi/öncelik** göster.
+2. **60 saniye — Kayıt ve ilgi alanları:** İki farklı hesaba giriş yap; her biri için farklı **bilgi seviyesi/öncelik** göster.
 3. **60 saniye — Bugünün sayısı:** Kapak, içindekiler ve sayfa düzenini göster.
 4. **90 saniye — Bir dosyanın içine gir:** Önce bağlam, sonra yenilik, deney, sınırları oku. Kaynağı aç.
 5. **60 saniye — Yeni sayı:** Oluşturma akışının gerçek kaynakla çalıştığını göster; başarısızlık durumunu gizleme.
-6. **30 saniye — PDF ve ritim:** PDF'i aç, arşivi göster; yerel/sahibine ait kurulumda belirli saatte çalışma ve gereksiz token harcamama kanıtını göster.
+6. **30 saniye — E-posta, PDF ve 08.00:** Gerçek test e-postasını aç, PDF'i ve arşivi göster; 08.00 teslim zamanlaması ile ortak analizde gereksiz token harcamama kanıtını göster.
 7. **30 saniye — Sınırlar:** Nelerin MVP, nelerin sıradaki sürüm olduğunu söyle.
 
 Süre örnektir; önemli olan sonucun gösterilmesidir.
@@ -100,7 +104,7 @@ Bu belgenin **cevaplamadığı** sorular:
 
 Bunlar **proje sahibinin ayrı mimari tasarımında** çözülür. Ürün sözleşmesi bunların hiçbirini önden kilitlemez.
 
-**Kabul edilmiş ürün kısıtları:** Self-hosted-first; konu önceliği ve bilgi seviyesi bağımsız; kullanıcı saat/zaman dilimi ayarlı; deterministik-first; Claude API yalnızca gerekli semantik/yazınsal işler için. Ayrıntı: [Çalışma ve maliyet ilkeleri](OPERATING_PRINCIPLES.md).
+**Kabul edilmiş ürün kısıtları:** Self-hosted-first; tek kurulumda çok kullanıcılı güvenli kayıt; kullanıcıya özel tercihler; yerel saat diliminde günlük 08.00 e-posta teslimi; ortak bilimsel analiz; deterministik-first; Claude API yalnızca gerekli semantik/yazınsal işler için. Ayrıntı: [Çalışma ve maliyet ilkeleri](OPERATING_PRINCIPLES.md) ve [çok kullanıcılı e-posta gereksinimleri](MULTI_USER_EMAIL_REQUIREMENTS.md).
 
 ## G. Claude Code'a devir ön şartı
 
