@@ -101,7 +101,22 @@ Bir yazı aşağıdaki sorulardan herhangi birinde başarısızsa revize edilmel
 - [ ] Kaynak linkleri ve tarihleri doğru mu?
 - [ ] Bu içerik önceki sayının gereksiz bir tekrarı değil mi?
 
-## 9. Editoryal hata davranışı
+## 9. Ufuk Raporu — Makaleden yeni araştırma sorusuna ve sektörel fırsata
+
+**Sayının en kıymetli ve son bölümü** yalnızca haberlerin özeti değildir. Birden fazla makalenin ortak sonucunu ve uyuşmazlıklarını görüp **"Buradan akademik olarak ne araştırılır, sektörde ne denenebilir, hangi gelişmeler makul?"** sorusunu yanıtlamalıdır.
+
+- **Gerçek bulgu:** Yalnızca orijinal kaynakta desteklenen veri/sonuç.
+- **Sentez / hipotez:** PaperMorning'in makaleler arası çıkarımı; doğrulanmış sonuç gibi sunulmaz.
+- **Akademik fırsat:** Araştırma sorusu, neden açık kaldığı, test edilebilir hipotez ve ilk deney/karşılaştırma. "Yayınlanabilir/özgün" iddiası ayrıca literatür kontrolü olmadan kurulmaz.
+- **Sektörel fırsat:** Kullanım ihtiyacı, yapılabilecek küçük pilot ve ölçülecek metrik; teknik/ekonomik/güvenlik/regülasyon engelleri ve olgunluk açıkça belirtilir. "Pazar garantili, kesin büyüyecek" gibi temelsiz iddialar yasak.
+- **Gelişim öngörüsü:** Kanıtın gösterdiği yön, belirsizlikler, çürütücü koşullar ve uygulanabilir ilk adım.
+- **Kaynak:** Her temel önerinin izlenebilir makale(leri) bulunur. Belirsiz veya eksik kanıt "yok" diye geçilir; fırsat uydurulmaz.
+
+İçeriğin kalitesi "kaç fırsat yazıldı?" ile ölçülmez; **okur hangi deneyi yapmalı, neyi ölçmeli, neden buna değer ve nerede yanılabilir?** sorularına cevap almalıdır.
+
+İlk sürümde veri tabanını veya makale PDF'lerini sırf bu bölüm için yeniden modele göndermek yerine daha önce üretilmiş kaynaklı analizler kullanılabilir; kaynak sınırı korunur. [Tam ürün gereksinimi](OUTLOOK_AND_OPPORTUNITIES.md).
+
+## 10. Editoryal hata davranışı
 
 Belirsiz veya erişilemeyen araştırma hakkında bilmediğini bil. Kaynak olmadan detay üretmek yerine daha kısa bir sayı yayımlamak kabul edilebilir. Yetersiz güvenle yazılmış içerik, düzgün görünen bir PDF'in içinde saklanmamalıdır.
 
