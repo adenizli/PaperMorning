@@ -36,4 +36,31 @@ PaperMorning, akademik makaleleri arka arkaya özetleyen bir liste değil; yeni 
 
 **Güvenilir ve okunabilir az sayıda araştırma, hatalı veya yüzeysel çok sayıda içerikten daha değerlidir.**
 
-Bu repo ilk olarak ürün sözleşmesini netleştirmek için açıldı. Henüz çalışan uygulama, otomatik yayın veya deployment yoktur.
+Bu repo, ürün sözleşmesi belgeleriyle birlikte PaperMorning **backend** uygulamasını (NestJS + PostgreSQL + TypeORM) içerir. React/Electron istemcisi ayrı bir repodadır.
+
+## Backend: geliştirme ve çalıştırma
+
+Gereksinimler: Node.js 22+, Docker (PostgreSQL için) veya erişilebilir bir PostgreSQL 14+.
+
+```bash
+cp .env.example .env              # yer tutucu parolaları değiştirin
+docker compose up -d postgres     # kalıcı volume ile PostgreSQL
+npm ci
+npm run build
+npm run migration:run             # şema yalnızca açık migration'larla oluşur (synchronize: false)
+npm start                         # http://localhost:3000/api/health
+```
+
+| Komut | Açıklama |
+|---|---|
+| `npm run start:dev` | TypeScript kaynağından çalıştırır (`.env` yüklenir) |
+| `npm run build` | `dist/` derlemesi |
+| `npm run lint` / `npm run format:check` | ESLint + Prettier kontrolleri |
+| `npm test` | Tüm testler (unit + PostgreSQL gerektiren integration/module-init/e2e) |
+| `npm run test:unit` | Yalnızca veritabanı gerektirmeyen unit testler |
+| `npm run migration:run` / `migration:revert` / `migration:show` | Derlenmiş `dist/` üzerinden migration yönetimi |
+| `npm run migration:generate -- src/service/persistence/migrations/<Ad>` | Entity değişikliğinden migration taslağı üretir (gözden geçirilerek commit edilir) |
+
+**Testler:** `TEST_DATABASE_URL` (varsayılan `postgres://papermorning:papermorning@localhost:5432/papermorning_test`) adresindeki veritabanı yoksa oluşturulur, şeması **silinip** tüm migration'larla yeniden kurulur. Bu yüzden testleri asla gerçek verinin bulunduğu veritabanına yönlendirmeyin. Testler `.env` dosyasını okumaz.
+
+**Katmanlar:** `src/config` (doğrulanmış ortam yapılandırması), `src/bootstrap` (HTTP ayarları: `/api` öneki, DTO whitelist doğrulaması), `src/core` (uygulama çapı yetenekler: health), `src/service` (entegrasyon adaptörleri: persistence), `src/domain` (iş modülleri).
