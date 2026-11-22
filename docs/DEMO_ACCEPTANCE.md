@@ -13,7 +13,7 @@ Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığ
 
 ### B1. Tercih deneyimi
 - [ ] En az iki araştırma ilgi alanı belirlenebiliyor.
-- [ ] Alan önceliği ve anlatım derinliği kullanıcı açısından anlaşılabiliyor.
+- [ ] Alan **önceliği** ve kullanıcının o alandaki **bilgi seviyesi** ayrı ayrı, anlaşılır biçimde seçilebiliyor.
 - [ ] Tercihler kaydedilip tekrar açıldığında korunuyor.
 - [ ] Üyelik sistemi veya birden çok kullanıcı **şart değil**.
 
@@ -39,20 +39,24 @@ Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığ
 - [ ] Oluşturulan çıktı sadece önceden elle yazılmış sabit demo içeriği değil; gerçek kaynaklardan yeniden sayı üretilebiliyor.
 - [ ] Hata olursa kullanıcıya ya da operatöre başarısızlık belli oluyor; eski sayı "bugün yayımlandı" diye sunulmuyor.
 - [ ] Aynı günlük sayı birden çok kez istemeden çoğaltılmıyor.
-- [ ] Salı günü otomatik çalışma hazırlanmış, tetiklenebilir ve nasıl doğrulandığı gösterilebilir durumda. Ertesi sabahı beklemeden canlı deneme veya kayıtlarla kanıt sunulmalı.
+- [ ] Salı günü kullanıcının belirlediği saat ve zaman dilimiyle otomatik çalışma hazırlanmış, tetiklenebilir ve nasıl doğrulandığı gösterilebilir durumda. Ertesi sabahı beklemeden canlı deneme veya kayıtlarla kanıt sunulmalı.
 
-### B5. Gösterilebilir canlı ortam
-- [ ] Proje sahibi ve demo katılımcıları canlı bir erişim noktasından yayını görebiliyor.
+### B5. Gösterilebilir self-hosted çalışma
+- [ ] Uygulama, kurulum sahibinin bilgisayarında veya onun seçtiği sunucuda çalışıyor; geliştiricinin işlettiği merkezi SaaS'a bağımlı değil.
+- [ ] Proje sahibi ve demo katılımcıları canlı bir kurulum üzerinden yayını görebiliyor (gerekirse sahibinin ekranından).
 - [ ] Bir uygulama hatası / eksik izin demoyu tamamen durdurmuyor; en azından son başarılı sayı görülebiliyor ve tarihi açık.
 - [ ] API anahtarları, gizli bilgiler veya özel kullanıcı verileri ekran görüntüsüne, repoya veya kullanıcı arayüzüne sızmıyor.
 - [ ] Demo sonunda hangi parçaların gerçekten canlı, hangilerinin yalnızca hazırlanmış olduğu açıkça söylenebiliyor.
+- [ ] Deterministik işlemler gereksiz Claude API çağrısı oluşturmuyor; çağrı sayısı ve maliyeti görülebiliyor.
+- [ ] Yeniden deneme sırasında aynı işin gereksiz tekrar faturalandırılması ve çift sayı yayımlanması önleniyor.
+- [ ] Yerel bilgisayar uyku/kapalıysa zamanlanmış işin otomatik çalışmasının garanti edilmediği kullanıcıya açık.
 
 ## C. Güçlü ama salı için bloklayıcı olmayanlar (P1)
 
 - [ ] Kullanıcıya yeni sayı bildirimi.
 - [ ] Daha uzun pazartesi özel sayısı.
 - [ ] Geçmiş sayıları tarih veya konuya göre filtreleyebilme.
-- [ ] Günlük / teknik derinlik için daha rafine kişiselleştirme.
+- [ ] Bilgi seviyesinden bağımsız **teknik detay tercihi** ve daha rafine kişiselleştirme.
 - [ ] Okuma süresi, paylaşılabilir özel bağlantılar, çoklu dil.
 - [ ] Sayının tercihlerini ve kaynaklarını açıklayan detaylı saydamlık raporu.
 
@@ -61,11 +65,11 @@ Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığ
 ## D. Örnek salı demo akışı (5–7 dakika)
 
 1. **30 saniye — Problem:** "Çok fazla makale var; ama hangi çalışma gerçekten yeni, bunu anlamak zor."
-2. **60 saniye — İlgi alanları:** İki alan ve farklı derinlik/öncelik göster.
+2. **60 saniye — İlgi alanları:** İki alan ve her biri için farklı **bilgi seviyesi/öncelik** göster.
 3. **60 saniye — Bugünün sayısı:** Kapak, içindekiler ve sayfa düzenini göster.
 4. **90 saniye — Bir dosyanın içine gir:** Önce bağlam, sonra yenilik, deney, sınırları oku. Kaynağı aç.
 5. **60 saniye — Yeni sayı:** Oluşturma akışının gerçek kaynakla çalıştığını göster; başarısızlık durumunu gizleme.
-6. **30 saniye — PDF ve ritim:** PDF'i aç, arşivi göster, her sabah işleme dair kanıtı göster.
+6. **30 saniye — PDF ve ritim:** PDF'i aç, arşivi göster; yerel/sahibine ait kurulumda belirli saatte çalışma ve gereksiz token harcamama kanıtını göster.
 7. **30 saniye — Sınırlar:** Nelerin MVP, nelerin sıradaki sürüm olduğunu söyle.
 
 Süre örnektir; önemli olan sonucun gösterilmesidir.
@@ -77,7 +81,7 @@ Süre örnektir; önemli olan sonucun gösterilmesidir.
 - **Yenilik ve tekrar:** Güncel ama birbirinin kopyası olmayan seçki.
 - **Okunabilirlik:** Meraklı ve alanı bilen iki değerlendiricinin ayrı görüşleri.
 - **Operasyonel güven:** Planlanan sabahların kaçında geçerli, tarihli sayı hazır olduğu.
-- **Maliyet:** Bir geçerli sayı üretmenin toplam maliyeti ve süre değişkenliği.
+- **Maliyet:** Bir geçerli sayı üretmenin toplam maliyeti ve süre değişkenliği; deterministik işlemlerin LLM'e devredilmediğinin denetlenmesi.
 
 Bunlar ürün/kalite ölçüleridir; herhangi bir izleme teknolojisi dayatmaz.
 
@@ -95,6 +99,8 @@ Bu belgenin **cevaplamadığı** sorular:
 - Harcama sınırları, gözlemleme ve sürümleme nasıl tasarlanacak?
 
 Bunlar **proje sahibinin ayrı mimari tasarımında** çözülür. Ürün sözleşmesi bunların hiçbirini önden kilitlemez.
+
+**Kabul edilmiş ürün kısıtları:** Self-hosted-first; konu önceliği ve bilgi seviyesi bağımsız; kullanıcı saat/zaman dilimi ayarlı; deterministik-first; Claude API yalnızca gerekli semantik/yazınsal işler için. Ayrıntı: [Çalışma ve maliyet ilkeleri](OPERATING_PRINCIPLES.md).
 
 ## G. Claude Code'a devir ön şartı
 
