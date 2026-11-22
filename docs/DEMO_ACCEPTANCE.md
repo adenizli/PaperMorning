@@ -15,7 +15,7 @@ Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığ
 - [ ] En az iki araştırma ilgi alanı belirlenebiliyor.
 - [ ] Alan **önceliği** ve kullanıcının o alandaki **bilgi seviyesi** ayrı ayrı, anlaşılır biçimde seçilebiliyor.
 - [ ] Tercihler kaydedilip tekrar açıldığında korunuyor.
-- [ ] Aynı kurulumda **iki hesap** açılıp güvenli giriş yapılabiliyor; e-posta adresleri minimum yöntemle doğrulanabiliyor. Oturum/token **3 saatte sona eriyor**, refresh token yok. Kapsamlı parola kurtarma P0 değil.
+- [ ] Aynı kurulumda **iki hesap** yalnızca kullanıcı adı, e-posta, şifreyle açılabiliyor; **doğrulama e-postası YOK**. Oturum/token **3 saatte sona eriyor**, refresh token yok. Kapsamlı parola kurtarma P0 değil.
 - [ ] Kullanıcıların tercihleri, yayınları ve abonelik ayarları birbirinden izole.
 
 ### B2. Gerçek veriyle içerik
@@ -55,8 +55,8 @@ Demonun ana etkisi: **Sadece sohbet çıktısı değil; kendi editoryal mantığ
 - [ ] Deterministik işlemler gereksiz Claude API çağrısı oluşturmuyor; çağrı sayısı ve maliyeti görülebiliyor. Haiku ve Sonnet görev bazında kullanılıyor; **Opus varsayılan olarak kapalı**, yalnızca istisnai durum için açılabilir.
 - [ ] Yeniden deneme sırasında aynı işin gereksiz tekrar faturalandırılması ve çift sayı yayımlanması önleniyor.
 - [ ] Yerel bilgisayar uyku/kapalıysa zamanlanmış işin otomatik çalışmasının garanti edilmediği kullanıcıya açık.
-- [ ] Aboneliği kapalı veya doğrulanmamış hesaba günlük dergi gönderilmiyor; gönderim durumu izlenebiliyor.
-- [ ] E-postanın içinde gerçekten okunabilir araştırma içeriği, kaynak linkleri ve tam sayıya güvenli erişim bulunuyor.
+- [ ] Günlük e-posta aboneliği açıkça etkinleştirilmemiş veya kapatılmış hesaba günlük dergi gönderilmiyor; doğrulama maili akışı yok ve gönderim durumu izlenebiliyor.
+- [ ] E-postanın içinde gerçekten okunabilir araştırma içeriği, kaynak linkleri, güvenli web bağlantısı **VE gerçek PDF dosya eki** bulunuyor.
 
 ## C. Güçlü ama salı için bloklayıcı olmayanlar (P1)
 
@@ -107,7 +107,7 @@ Bu belgenin **cevaplamadığı** sorular:
 
 Bunlar **proje sahibinin ayrı mimari tasarımında** çözülür. Ürün sözleşmesi bunların hiçbirini önden kilitlemez.
 
-**Kabul edilmiş ürün kısıtları:** Self-hosted-first; tek kurulumda çok kullanıcılı basit güvenli kayıt, 3 saatlik refresh'siz token; kullanıcıya özel tercihler; yerel saat diliminde günlük 08.00 e-posta teslimi; ortak bilimsel analiz; kalıcı web/PDF arşivi; yazı 👍/👎; Haiku/Sonnet bazlı görev yönlendirmesi; deterministik-first. **Güncel P0:** [Lean MVP kapsamı](LEAN_MVP_SCOPE.md). Diğer ayrıntılar: [Çalışma ve maliyet ilkeleri](OPERATING_PRINCIPLES.md) ve [çok kullanıcılı e-posta gereksinimleri](MULTI_USER_EMAIL_REQUIREMENTS.md).
+**Kabul edilmiş ürün kısıtları:** Self-hosted-first; tek kurulumda üç alanlı, doğrulamasız kayıt ve 3 saatlik refresh'siz token; kullanıcıya özel tercihler; yerel saat diliminde günlük 08.00 PDF EKLİ e-posta teslimi; ortak bilimsel analiz; kalıcı web/PDF arşivi; yazı 👍/👎; Haiku/Sonnet bazlı görev yönlendirmesi; deterministik-first. **Güncel P0:** [Lean MVP kapsamı](LEAN_MVP_SCOPE.md). Diğer ayrıntılar: [Çalışma ve maliyet ilkeleri](OPERATING_PRINCIPLES.md) ve [çok kullanıcılı e-posta gereksinimleri](MULTI_USER_EMAIL_REQUIREMENTS.md).
 
 ## G. Claude Code'a devir ön şartı
 
