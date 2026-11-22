@@ -40,7 +40,7 @@ Kullanıcı şu tercihleri tanımlayabilmelidir:
 - **Dil:** İlk demoda Türkçe okuma deneyimi esas; başka diller sonraya kalabilir.
 - **Yayın yoğunluğu:** Kısa veya ayrıntılı okuma tercihi; katı sayfa sayısı yerine yeterli bilimsel içerik.
 - **Yayın ritmi:** Hedef, kullanıcının seçtiği saat dilimine göre **her sabah 08.00'de** günlük derginin e-posta ile teslim edilmesi. Üretim bu saatten önce tamamlanır. Pazartesi uzun haftalık özel sayı, bir sonraki ürün kararıdır.
-- **Hesap ve gönderim:** Kayıt, giriş, e-posta doğrulama, güvenli hesap kurtarma ve e-posta aboneliği yönetimi. Her kullanıcının yayın arşivi diğerinden ayrıdır.
+- **Hesap ve gönderim:** Basit e-posta/parola ile kayıt ve giriş, 3 saatlik refresh edilmeyen token, minimum e-posta doğrulama ve e-posta gönderimini açma/kapama. **Kapsamlı parola kurtarma, refresh token veya ayrı auth servisi MVP kapsamında değil.** Her kullanıcının yayın arşivi diğerinden ayrıdır.
 
 Tercihler kullanıcı hesabına bağlı kalır ve okuyucu her defasında yeniden seçim yapmaz. **Uygulamanın kendi kullanıcı hesabı gereklidir; merkezi bir PaperMorning bulut hesabı gerekmemelidir.**
 
@@ -52,8 +52,9 @@ Tercihler kullanıcı hesabına bağlı kalır ve okuyucu her defasında yeniden
 4. Önemli bulgu yoksa sırf sayfa doldurmak için içerik uydurulmaz.
 5. Önceki sayılarda ele alınmış çalışmalar sebepsiz tekrar edilmez; anlamlı güncelleme varsa açıkça belirtilir.
 6. Okur kaynak ve makale sayfasına gidebilir.
-7. Ortaya **yayınlanmış, tarihli, geri dönüp okunabilen ve sabah 08.00'de e-posta olarak gönderilen kişiye özel bir sayı** çıkar. Aynı kaynakların akademik analizi farklı kullanıcılarda yeniden kullanılabilir.
-8. **Claude API, yalnızca semantik değerlendirme, bilimsel yorumlama ve okurun bilgi birikimine göre yazma gibi gerçek dil/anlam işleri için kullanılır.** Gereksiz çağrılar azaltılır; harcama ve hata davranışı görünür olur.
+7. Ortaya **yayınlanmış, tarihli, web üzerinden okunabilen, PDF'i ve üretilmiş içerikleri kalıcı arşivlenen ve sabah 08.00'de e-posta olarak gönderilen kişiye özel bir sayı** çıkar. Aynı kaynakların akademik analizi farklı kullanıcılarda yeniden kullanılabilir.
+8. **Claude API, yalnızca semantik değerlendirme, bilimsel yorumlama ve okurun bilgi birikimine göre yazma gibi gerçek dil/anlam işleri için kullanılır.** Görev bazında Haiku (basit değerlendirme), Sonnet (ana analiz/yazım), **istisnai ve varsayılan olarak kapalı Opus** seçilebilir. Gereksiz çağrılar azaltılır; harcama ve hata davranışı görünür olur.
+9. **Her yazı için 👍/👎 geri bildirimi** kullanıcı hesabına kaydedilir. Bu aşamada karmaşık kişiselleştirme/öğrenme algoritması yoktur.
 
 **Günlük sayı**: Başlangıç tasarım hedefi yaklaşık **5–8 sayfa**; bu bir kota değil.  
 **Haftalık özel sayı**: Gelecekte pazartesi yaklaşık **12–15 sayfa** düşünülebilir; MVP için bloklayıcı değildir.
@@ -86,19 +87,20 @@ Okuyucunun dergi sonrasında cevaplayabilmesi gereken sorular:
 - Gerçek, güncel, referanslanabilir araştırmalardan üretilmiş **bir örnek sayı**.
 - Kapak, içindekiler, en az bir derin dosya, kısa bölümler, kaynaklar.
 - Kaynak/makale iddialarının izlenebilirliği; preprint işaretleri.
-- Okunabilir sayfa düzeni ve **PDF olarak erişilebilir yayın**.
+- Okunabilir sayfa düzeni, **basit front-end üzerinden okuma**, **PDF olarak erişilebilir yayın**, kullanıcıya ait geçmiş sayıların ve gönderilmiş çıktıların korunması.
 - Yayını yeniden oluşturmayı / yeni sayı oluşturmayı gösterebilen bir kullanım yolu.
 - Kullanıcının kendi zaman diliminde **08.00'de** gerçek e-posta teslim hedefi için **hazırlanmış ve doğrulanabilir otomatik çalışma davranışı**, manuel test gönderimi ve gönderim durumu.
 - **Tek kurulumda self-hosting deneyimi** ve **deterministik işlerde gereksiz Claude API kullanımı yapılmadığının** gösterimi.
 - Kurulum sahibinin bilgisayarında veya seçtiği sunucuda çalışan, **canlı etkileşimle gösterilebilir** bir uygulama; yalnızca kayıtlı video yeterli değil.
 - Kullanıcının kod yazmasını gerektirmeyen işletim / inceleme deneyimi.
 - Ortak makalenin analizinin kullanıcılar arasında yeniden kullanıldığının, iki farklı kişisel sayı ve gerçek e-posta gönderiminin gösterilmesi.
+- Makale 👍/👎 kaydı, Haiku/Sonnet görev ayrımı ve **3 saatlik refresh'siz oturum** davranışının gösterilmesi.
 
 Bunlar **neyle, hangi servisle veya hangi topolojiyle** yapılacağına dair talimat değildir.
 
 ## 9. Bilinçli olarak kapsam dışı
 
-İlk demoda şart olmayanlar: herkese **sınırsız açık kayıt**, kurumsal IAM/SSO, sosyal özellikler, ödeme, mobil uygulama, karmaşık abonelik planları, haftalık özel baskı, çok dilli tam destek, sınırsız araştırma alanı, makalenin PDF tam metnine erişilemediği halde tam metin analizi iddiası.
+İlk demoda şart olmayanlar: herkese **sınırsız açık kayıt**, refresh token, kapsamlı parola sıfırlama, kurumsal IAM/SSO, sosyal özellikler, ödeme, mobil uygulama, karmaşık abonelik planları, gelişmiş feedback öneri motoru, haftalık özel baskı, çok dilli tam destek, sınırsız araştırma alanı, makalenin PDF tam metnine erişilemediği halde tam metin analizi iddiası.
 
 ## 10. Ürün kararları — henüz kilitlenmeyenler
 
@@ -109,7 +111,7 @@ Bunlar **neyle, hangi servisle veya hangi topolojiyle** yapılacağına dair tal
 - Kapak/görsel stratejisi: özgün çizimler, açık lisanslı görseller veya tipografik kapak.
 - Daha sonra haftalık özel sayı eklenip eklenmeyeceği.
 
-**Self-hosted çok kullanıcılı çalışma, güvenli hesaplar, 08.00 e-posta teslimi ve deterministik-first, bütçe duyarlı kullanım ürün gereksinimidir. Mimari, kod tabanı, model seçimi, veri erişimi, iş zamanlama aracı ve deployment teknik kararları bu belgeyle alınmamıştır.** Ayrıntılar için [çalışma ilkeleri](OPERATING_PRINCIPLES.md) ve [çok kullanıcılı e-posta gereksinimleri](MULTI_USER_EMAIL_REQUIREMENTS.md).
+**Self-hosted çok kullanıcılı çalışma, basit ve güvenli 3 saatlik oturum, web/PDF arşivi, 👍/👎, model bazlı görev yönlendirmesi, 08.00 e-posta teslimi ve deterministik-first, bütçe duyarlı kullanım ürün gereksinimidir. Mimari, kod tabanı, model seçimi, veri erişimi, iş zamanlama aracı ve deployment teknik kararları bu belgeyle alınmamıştır.** Ayrıntılar için **[güncel Lean MVP kapsamı](LEAN_MVP_SCOPE.md)**, [çalışma ilkeleri](OPERATING_PRINCIPLES.md) ve [çok kullanıcılı e-posta gereksinimleri](MULTI_USER_EMAIL_REQUIREMENTS.md).
 
 ## 11. Ürün açısından taviz vermeyeceğimiz noktalar
 
