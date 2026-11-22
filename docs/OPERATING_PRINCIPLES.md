@@ -9,7 +9,7 @@
 PaperMorning, merkezi olarak bizim barındırdığımız bir SaaS'a bağımlı **olmayacaktır**.
 
 - İsteyen kendi bilgisayarında, isteyen ev sunucusunda, isteyen kiraladığı sunucuda çalıştırabilmelidir.
-- Sistem her gün elle açılmadan, **kullanıcının belirlediği saat ve zaman dilimine göre**, kendi ortamında görevini yerine getirebilmelidir.
+- Sistem her gün elle açılmadan, **her okuyucunun zaman diliminde saat 08.00'de e-posta teslim edebilecek şekilde**, kendi ortamında görevini yerine getirebilmelidir. Üretim teslimden önce tamamlanır.
 - Kurulumun sahibi; kendi çalışma ortamı, tercihleri, erişim bilgileri ve API kullanım maliyetinin kontrolüne sahip olmalıdır.
 - Ürünün çalışması için geliştiricinin sürekli aktif olması veya merkezi bir PaperMorning hesabı bulunması gerekmez.
 - Claude API kullanımını tercih eden kullanıcı kendi API erişimini sağlamalıdır; yalnızca yerelde çalışma hedefi, üçüncü taraf API'ye ağ bağlantısı ihtiyacını ortadan kaldırmaz.
@@ -27,7 +27,7 @@ Kullanıcı ilk kurulumda her **konu başlığı** için iki zorunlu tercih tan�
 
 **Dikkat:** "Konuyu ne kadar iyi biliyorum?" ile "Ne kadar teknik okumak istiyorum?" aynı soru değildir. İlk sürüm için **bilgi seviyesi** esas alınır. İstenirse ileride bağımsız bir teknik derinlik/okuma tarzı tercihi eklenebilir; ikisi veride ve ürün kararında karıştırılmaz.
 
-Tercihler kaydedilir ve kurulum sahibince sonradan güncellenebilir. İlk sürümde bulut hesabı veya kullanıcı girişi zorunlu olmamalıdır.
+Tercihler **okuyucu hesabına** kaydedilir ve sonradan güncellenebilir. Çok kullanıcılı kurulumda güvenli kayıt/giriş gereklidir; geliştirici tarafından işletilen merkezi bir bulut hesabı gerekmez.
 
 ## 3. Deterministik-first çalışma ilkesi
 
@@ -54,7 +54,7 @@ Bu tablonun iş mantığı sınırları **gereksinimdir**; hangi algoritma, serv
 
 ## 4. Günlük işletim beklentisi
 
-İlk kurulum sahibi **yayının saatini ve zaman dilimini** seçebilir. Varsayılan saat sonradan kararlaştırılır.
+Her okur kendi zaman dilimini ayarlar; **günlük gönderim saati 08.00'dir**. İçerik önceden hazırlanmalıdır. Çalışma ortamı kapalıysa garanti verilemez.
 
 Günlük çalışma beklenen sonuçları:
 
@@ -63,7 +63,7 @@ Günlük çalışma beklenen sonuçları:
 3. Gerçek yorum gerektiren az sayıdaki aday için Claude API'nin devreye girmesi.
 4. Doğrulanabilir kaynaklı yazıların üretilmesi.
 5. Sabit yayın tasarımına yerleştirme, PDF/dijital sayı üretimi.
-6. Başarılı, tarihli bir sayı olarak saklama ve okuyucuya sunma.
+6. Başarılı, tarihli bir sayı olarak saklama; her kullanıcıya göre kişisel seçki oluşturma ve **08.00'de gerçek e-posta** gönderme. Gönderim tekrarları kayıt altına alınır.
 
 Bunlar **mantıksal beklentiler**; fiziksel servis veya agent tasarımı değildir. Gün içindeki kaynak taramasının sıklığı, tam çalışma akışı ve zamanlamanın aracı mimari aşamasında seçilir.
 
@@ -77,7 +77,7 @@ Başarısızlık veya tekrarda:
 
 - **Ön eleme ilk, pahalı anlamsal okuma sonra:** Tüm makalelerin tam metnini bir modelle incelemek başlangıç varsayımı değildir.
 - **Gerektiği kadar bağlam:** Makalenin destekleyici bölümleri okunmalı; her şeyi gerekçesiz modele aktarmak doğru değil.
-- **Tekrar kullanım:** Aynı içerik ve aynı tercih bağlamında gereksiz tekrar çağrıları önlenmeli; anlamlı içerik / tercih değişiminde yeniden değerlendirme gerekebilir.
+- **Tekrar kullanım:** Aynı makalenin aynı sürümünün bilimsel analizi bütün okuyucular için ortak yeniden kullanılabilmeli. Aynı dil/bilgi seviyesi için üretilmiş yazı da uygunsa paylaşılmalı; kişisel seçki/dağılım ayrıca oluşturulmalı. İçerik veya analiz sözleşmesi değişirse geçerlilik kontrol edilmeli.
 - **Ölçülebilir bütçe:** Bir sayıdaki çağrı sayısı, girdi/çıktı tokenları, tahmini/gerçek API maliyeti ve başarısız çağrılar denetlenebilir olmalı.
 - **Sınır aşımı:** Günlük kullanım/harcama üst sınırına yaklaşınca davranış belirli ve görünür olmalı; sınırsız retry veya sessizce yüksek maliyet kabul edilemez.
 - **Kaliteden rastgele tasarruf yok:** Maliyeti azaltmak için kaynak doğrulaması veya kritik araştırma değerlendirmesi atlanmamalı.
@@ -88,13 +88,13 @@ Başarısızlık veya tekrarda:
 
 - Kullanıcı iki alanda **öncelik** ve **bilgi düzeyini ayrı ayrı** ayarlayıp kaydedebiliyor.
 - Aynı fikir, farklı bilgi seviyelerine yazıldığında gerekli bağlam ve teknik terimler gözle görülür biçimde farklılaşıyor (bilimsel bulgular değişmeden).
-- Tek bir kurulumda günlük sayı, dışarıdan kod değiştirmeden oluşturulabiliyor.
-- Belirlenmiş saat için otomatik tetikleme **gösterilmiş ve test edilmiş**; yalnızca söz verilmemiş.
+- Tek bir kurulumda **iki kayıtlı okuyucu** kendi günlük sayılarını dışarıdan kod değiştirmeden oluşturabiliyor.
+- Kullanıcı zaman diliminde **08.00 e-posta teslimi** zamanlaması gösterilmiş ve gerçek test e-postasıyla doğrulanmış; yalnızca söz verilmemiş.
 - Claude API çağrısı yapılmadan tamamlanabilen işlerin gerçekten API çağrısı yapmadığı ve çağrı maliyeti/adedinin görülebildiği gösteriliyor.
 - Bir sayıyı tekrar çalıştırma, yanlışlıkla iki kez yayın veya aynı işi tekrar faturalandırma tehlikesini kontrol edebildiğini kanıtlıyor.
 - Gerçek kaynaklı ve okunabilir bir PDF sayı üretiyor.
 
-**Kapsam sınırı:** Demo için tüm hedef işletim sistemlerinde hazır paket, çok kullanıcılı hosting platformu, karmaşık giriş sistemi, merkezi bildirim altyapısı şart değil.
+**Kapsam sınırı:** Demo için tüm hedef işletim sistemlerinde hazır paket, merkezi hosting platformu, kurumsal IAM veya merkezi e-posta altyapısı şart değil. **Tek kurulumda basit güvenli kayıt/giriş, iki okuyucu ve günlük e-posta gönderimi artık şart.** Ayrıntı: [çok kullanıcılı e-posta gereksinimleri](MULTI_USER_EMAIL_REQUIREMENTS.md).
 
 ## 7. Mimariyi tasarlayan kişinin kararına bırakılanlar
 
