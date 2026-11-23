@@ -79,7 +79,7 @@ describe('LlmService (PostgreSQL ledger)', () => {
   it.each([
     [
       'rate limit',
-      () => new Anthropic.RateLimitError(429, {}, 'slow down', new Headers()),
+      () => new Anthropic.RateLimitError(429, {}, 'slow down', new Headers({ 'retry-after': '0' })),
       'RATE_LIMITED',
     ],
     ['connection', () => new Anthropic.APIConnectionError({ message: 'reset' }), 'UNAVAILABLE'],

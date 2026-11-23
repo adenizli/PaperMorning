@@ -10,15 +10,36 @@ import {
   LlmJsonRequest,
   LlmJsonResult,
   LlmTask,
+  LlmUsageStatus,
   LlmUsageSummaryRow,
 } from './llm.types';
 
 export const ANTHROPIC_CLIENT = Symbol('ANTHROPIC_CLIENT');
 
+/** pg advisory lock key that serializes budget reservations (one short transaction each). */
+export const LLM_BUDGET_LOCK_KEY = 72_100_101;
+/** Re-sends after a definitive, unbilled transient error (429 / 5xx / 529). */
+export const LLM_TRANSIENT_RETRIES = 2;
+const MAX_RETRY_DELAY_MS = 20_000;
+/**
+ * Tokens added to the input upper bound for the structured-output system instructions the API
+ * adds. The text itself is bounded by its UTF-8 byte length (a token is never shorter than a byte).
+ */
+const STRUCTURED_OUTPUT_OVERHEAD_TOKENS = 2_000;
+
+interface Reservation {
+  id: string;
+  reservedUsd: number;
+}
+
 /**
  * Claude transport with fixed, auditable task -> model routing (Haiku for screening, Sonnet for
- * analysis/writing/outlook, Opus only when explicitly enabled by config). Enforces the operator's
- * daily budget before every call and records every call in the usage ledger.
+ * analysis/writing/outlook, Opus only when explicitly enabled by config).
+ *
+ * Budget: before every provider request a worst-case cost is reserved in the `llm_usage` ledger
+ * under a PostgreSQL advisory lock, counting all in-flight reservations, so concurrent callers can
+ * never collectively exceed LLM_DAILY_BUDGET_USD. The reservation is settled to the reported usage
+ * afterwards; uncertain outcomes keep the worst case. No transaction is held across the API call.
  */
 @Injectable()
 export class LlmService {
@@ -48,29 +69,86 @@ export class LlmService {
     }
   }
 
+  /**
+   * Upper bound on how long one generateJson() can take: every attempt runs into the client
+   * timeout and every retry waits the maximum back-off. Callers size claim leases from this.
+   */
+  maxCallDurationMs(): number {
+    const attempts = 1 + LLM_TRANSIENT_RETRIES;
+    return attempts * this.config.llm.timeoutMs + LLM_TRANSIENT_RETRIES * MAX_RETRY_DELAY_MS;
+  }
+
+  /** Worst-case USD of one provider request for this task (what is reserved before sending). */
+  worstCaseCostUsd(request: LlmJsonRequest): number {
+    const price = this.price(this.modelFor(request.task));
+    const inputUpperBound =
+      Buffer.byteLength(request.system, 'utf8') +
+      Buffer.byteLength(request.prompt, 'utf8') +
+      Buffer.byteLength(JSON.stringify(request.schema), 'utf8') +
+      STRUCTURED_OUTPUT_OVERHEAD_TOKENS;
+    return (
+      (inputUpperBound * price.inputPerMTokUsd + request.maxTokens * price.outputPerMTokUsd) /
+      1_000_000
+    );
+  }
+
   async generateJson(request: LlmJsonRequest): Promise<LlmJsonResult> {
     if (!this.client) {
       throw new LlmError('NOT_CONFIGURED', 'ANTHROPIC_API_KEY is not configured');
     }
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.attempt(this.client, request);
+      } catch (error) {
+        if (!(error instanceof LlmError) || !error.transient || attempt >= LLM_TRANSIENT_RETRIES) {
+          throw error;
+        }
+        const delayMs = Math.min(
+          error.transient.retryAfterMs ?? 1_000 * 2 ** attempt,
+          MAX_RETRY_DELAY_MS,
+        );
+        this.logger.warn(`${request.task}: ${error.message}; retrying in ${delayMs} ms`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  /** One provider request: reserve -> call (no transaction open) -> settle. */
+  private async attempt(client: Anthropic, request: LlmJsonRequest): Promise<LlmJsonResult> {
     const model = this.modelFor(request.task);
-    await this.assertWithinBudget(model, request);
+    const reservation = await this.reserve(request, model);
 
     let response: Anthropic.Message;
     try {
-      response = await this.client.messages.create({
-        model,
-        max_tokens: request.maxTokens,
-        system: request.system,
-        messages: [{ role: 'user', content: request.prompt }],
-        output_config: {
-          format: { type: 'json_schema', schema: request.schema },
-          ...(request.effort ? { effort: request.effort } : {}),
+      response = await client.messages.create(
+        {
+          model,
+          max_tokens: request.maxTokens,
+          system: request.system,
+          messages: [{ role: 'user', content: request.prompt }],
+          output_config: {
+            format: { type: 'json_schema', schema: request.schema },
+            ...(request.effort ? { effort: request.effort } : {}),
+          },
         },
-      });
+        // Retries are done above, one reservation per request actually sent.
+        { maxRetries: 0 },
+      );
     } catch (error) {
-      const kind = classifyApiError(error);
-      await this.record(request.task, model, 'FAILED', kind, 0, 0);
-      throw new LlmError(kind, `Claude call for ${request.task} failed: ${errorMessage(error)}`);
+      const failure = classifyApiError(error);
+      const message = `Claude call for ${request.task} failed: ${errorMessage(error)}`;
+      if (failure.definitive) {
+        // The API answered with an error status: nothing was generated or billed.
+        await this.settle(reservation, model, 'FAILED', failure.kind, 0, 0, 0);
+        throw new LlmError(
+          failure.kind,
+          message,
+          failure.transient ? { retryAfterMs: failure.retryAfterMs } : null,
+        );
+      }
+      // No response (timeout / dropped connection): it may have been processed and billed.
+      await this.settle(reservation, model, 'UNKNOWN', failure.kind, 0, 0, reservation.reservedUsd);
+      throw new LlmError(failure.kind, `${message} (outcome unknown; worst-case cost kept)`);
     }
 
     // Price by the model that actually served the response.
@@ -78,16 +156,22 @@ export class LlmService {
     const inputTokens = response.usage.input_tokens ?? 0;
     const outputTokens = response.usage.output_tokens ?? 0;
     const costUsd = this.cost(servedModel, inputTokens, outputTokens);
+    if (costUsd > reservation.reservedUsd) {
+      this.logger.warn(
+        `${request.task} cost $${costUsd.toFixed(6)} exceeded its reservation $${reservation.reservedUsd.toFixed(6)}`,
+      );
+    }
 
     const failure = this.responseFailure(response);
     if (failure) {
-      await this.record(
-        request.task,
+      await this.settle(
+        reservation,
         servedModel,
         'FAILED',
         failure.kind,
         inputTokens,
         outputTokens,
+        costUsd,
       );
       throw new LlmError(failure.kind, failure.message);
     }
@@ -100,19 +184,85 @@ export class LlmService {
     try {
       data = JSON.parse(text);
     } catch {
-      await this.record(
-        request.task,
+      await this.settle(
+        reservation,
         servedModel,
         'FAILED',
         'INVALID_OUTPUT',
         inputTokens,
         outputTokens,
+        costUsd,
       );
       throw new LlmError('INVALID_OUTPUT', `${request.task} returned non-JSON output`);
     }
 
-    await this.record(request.task, servedModel, 'SUCCEEDED', null, inputTokens, outputTokens);
+    await this.settle(
+      reservation,
+      servedModel,
+      'SUCCEEDED',
+      null,
+      inputTokens,
+      outputTokens,
+      costUsd,
+    );
     return { data, model: servedModel, inputTokens, outputTokens, costUsd };
+  }
+
+  /**
+   * Atomically reserves the worst-case cost against today's (UTC, database clock) budget. All
+   * reservers serialize on one advisory lock inside a short transaction, so the sum they check
+   * includes every other in-flight reservation.
+   */
+  private async reserve(request: LlmJsonRequest, model: string): Promise<Reservation> {
+    const worstCase = roundUsd(this.worstCaseCostUsd(request));
+    const budget = this.config.llm.dailyBudgetUsd;
+    const reservation = await this.usage.manager.transaction(
+      async (manager): Promise<Reservation | { committed: number }> => {
+        await manager.query('SELECT pg_advisory_xact_lock($1)', [LLM_BUDGET_LOCK_KEY]);
+        const [{ committed }] = await manager.query<{ committed: string }[]>(
+          `SELECT COALESCE(SUM(cost_usd), 0) AS committed FROM llm_usage
+          WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`,
+        );
+        if (Number(committed) + worstCase > budget) return { committed: Number(committed) };
+        const [row] = await manager.query<{ id: string }[]>(
+          `INSERT INTO llm_usage (task, model, status, reserved_usd, cost_usd)
+         VALUES ($1, $2, 'RESERVED', $3, $3) RETURNING id`,
+          [request.task, model, worstCase],
+        );
+        return { id: row.id, reservedUsd: worstCase };
+      },
+    );
+    if ('committed' in reservation) {
+      this.logger.warn(
+        `Daily LLM budget reached: committed $${reservation.committed.toFixed(4)} (incl. in-flight), next ${request.task} call may cost up to $${worstCase.toFixed(4)}, budget $${budget}`,
+      );
+      throw new LlmError('BUDGET_EXCEEDED', `Daily LLM budget of $${budget} would be exceeded`);
+    }
+    return reservation;
+  }
+
+  /** Replaces the reservation with the settled cost. If this write fails the worst case stays. */
+  private async settle(
+    reservation: Reservation,
+    model: string,
+    status: Exclude<LlmUsageStatus, 'RESERVED'>,
+    errorKind: LlmErrorKind | null,
+    inputTokens: number,
+    outputTokens: number,
+    costUsd: number,
+  ): Promise<void> {
+    await this.usage.update(
+      { id: reservation.id },
+      {
+        model,
+        status,
+        errorKind,
+        inputTokens,
+        outputTokens,
+        costUsd: roundUsd(costUsd),
+        settledAt: new Date(),
+      },
+    );
   }
 
   /** Spend recorded since 00:00 UTC of the given instant. */
@@ -152,24 +302,6 @@ export class LlmService {
     }));
   }
 
-  private async assertWithinBudget(model: string, request: LlmJsonRequest): Promise<void> {
-    const price = this.price(model);
-    const approxInputTokens = Math.ceil((request.system.length + request.prompt.length) / 3);
-    const worstCase =
-      (approxInputTokens * price.inputPerMTokUsd + request.maxTokens * price.outputPerMTokUsd) /
-      1_000_000;
-    const spent = await this.spentToday();
-    if (spent + worstCase > this.config.llm.dailyBudgetUsd) {
-      this.logger.warn(
-        `Daily LLM budget reached: spent $${spent.toFixed(4)}, next ${request.task} call may cost up to $${worstCase.toFixed(4)}, budget $${this.config.llm.dailyBudgetUsd}`,
-      );
-      throw new LlmError(
-        'BUDGET_EXCEEDED',
-        `Daily LLM budget of $${this.config.llm.dailyBudgetUsd} would be exceeded`,
-      );
-    }
-  }
-
   private responseFailure(
     response: Anthropic.Message,
   ): { kind: LlmErrorKind; message: string } | null {
@@ -195,39 +327,47 @@ export class LlmService {
       (inputTokens * price.inputPerMTokUsd + outputTokens * price.outputPerMTokUsd) / 1_000_000
     );
   }
-
-  private async record(
-    task: LlmTask,
-    model: string,
-    status: 'SUCCEEDED' | 'FAILED',
-    errorKind: LlmErrorKind | null,
-    inputTokens: number,
-    outputTokens: number,
-  ): Promise<void> {
-    await this.usage.insert({
-      task,
-      model,
-      status,
-      errorKind,
-      inputTokens,
-      outputTokens,
-      costUsd: this.cost(model, inputTokens, outputTokens),
-    });
-  }
 }
 
 export function startOfUtcDay(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
-function classifyApiError(error: unknown): LlmErrorKind {
-  if (error instanceof Anthropic.RateLimitError) return 'RATE_LIMITED';
-  if (error instanceof Anthropic.APIConnectionError) return 'UNAVAILABLE';
-  if (error instanceof Anthropic.InternalServerError) return 'UNAVAILABLE';
-  if (error instanceof Anthropic.APIError) {
-    return error.status === 529 || error.status === 408 ? 'UNAVAILABLE' : 'REQUEST_REJECTED';
+interface ApiFailure {
+  kind: LlmErrorKind;
+  /** The provider returned an HTTP error status: the request was not processed or billed. */
+  definitive: boolean;
+  /** Safe to re-send right away (429 / 5xx / 529 responses). */
+  transient: boolean;
+  retryAfterMs: number | null;
+}
+
+function classifyApiError(error: unknown): ApiFailure {
+  // Timeouts and dropped connections have no status: the request may have been processed.
+  if (error instanceof Anthropic.APIConnectionError) {
+    return { kind: 'UNAVAILABLE', definitive: false, transient: false, retryAfterMs: null };
   }
-  return 'UNAVAILABLE';
+  if (error instanceof Anthropic.APIError && typeof error.status === 'number') {
+    const retryAfterMs = parseRetryAfter(error.headers as Headers | undefined);
+    if (error.status === 429) {
+      return { kind: 'RATE_LIMITED', definitive: true, transient: true, retryAfterMs };
+    }
+    if (error.status >= 500 || error.status === 408) {
+      return { kind: 'UNAVAILABLE', definitive: true, transient: true, retryAfterMs };
+    }
+    return { kind: 'REQUEST_REJECTED', definitive: true, transient: false, retryAfterMs: null };
+  }
+  return { kind: 'UNAVAILABLE', definitive: false, transient: false, retryAfterMs: null };
+}
+
+function parseRetryAfter(headers: Headers | undefined): number | null {
+  const value = headers?.get?.('retry-after');
+  const seconds = value ? Number(value) : NaN;
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
+}
+
+function roundUsd(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
 }
 
 function errorMessage(error: unknown): string {
