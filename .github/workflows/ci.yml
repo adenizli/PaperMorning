@@ -54,6 +54,10 @@ jobs:
         run: |
           if [ -d node_modules/playwright ]; then
             npx playwright install --with-deps --only-shell chromium
+            # Ubuntu 23.10+ blocks unprivileged user namespaces via AppArmor, which Chromium's
+            # sandbox needs ("No usable sandbox!"). Lift it on this throwaway runner so the tests
+            # keep running with the sandbox ON (the production default outside Docker).
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           else
             echo "playwright not installed on this branch; skipping"
           fi
