@@ -61,6 +61,13 @@ npm start                         # http://localhost:3000/api/health
 | `npm run migration:run` / `migration:revert` / `migration:show` | Derlenmiş `dist/` üzerinden migration yönetimi |
 | `npm run migration:generate -- src/service/persistence/migrations/<Ad>` | Entity değişikliğinden migration taslağı üretir (gözden geçirilerek commit edilir) |
 
-**Testler:** `TEST_DATABASE_URL` (varsayılan `postgres://papermorning:papermorning@localhost:5432/papermorning_test`) adresindeki veritabanı yoksa oluşturulur, şeması **silinip** tüm migration'larla yeniden kurulur. Bu yüzden testleri asla gerçek verinin bulunduğu veritabanına yönlendirmeyin. Testler `.env` dosyasını okumaz.
+**Testler (dikkat: `npm test` test veritabanının şemasını SİLER):** Veritabanı testleri `TEST_DATABASE_URL` ile gösterilen veritabanında `public` şemasını silip tüm migration'larla yeniden kurar. Bu yüzden kurulum, hiçbir şeye bağlanmadan önce hedefi doğrular ve şüphede durur:
+
+- `TEST_DATABASE_URL` **açıkça** verilmelidir (varsayılan yoktur); yalnızca `postgres://` URL'si, sorgu parametresi yok, veritabanı adı küçük harfli `<ad>_test` biçiminde ve `prod`/`production`/`staging`/`live` gibi sözcükler içermez.
+- Sunucu yerel olmalıdır (`localhost`/`127.0.0.1`/`::1`); ayrılmış bir test sunucusu için yalnızca o host `PM_TEST_DB_ALLOW_HOST=<host>` ile açıkça izinlenebilir. `NODE_ENV=production` reddedilir.
+- Uygulamanın kendi veritabanı (`DATABASE_URL`, ortamdan veya `.env` dosyasından) hedeflenemez; aynı host/port/ad farklı yazılsa bile.
+- Yıkıcı SQL'den önce veritabanında kimlik işareti aranır: `COMMENT ON DATABASE … IS 'papermorning:disposable-test-database'`. Test kurulumu yalnızca **kendi oluşturduğu** veritabanını otomatik işaretler; mevcut ama işaretsiz bir veritabanı değiştirilmeden reddedilir.
+
+Güvenli kurulum: ayrı, atılabilir bir PostgreSQL (tercihen ayrı bir konteyner ve yalnızca test için bir rol) kullanın, örn. `docker run -d --name pm-test-pg -e POSTGRES_USER=pm_test -e POSTGRES_PASSWORD=<rastgele> -p 127.0.0.1:55432:5432 postgres:16-alpine`, ardından `TEST_DATABASE_URL=postgres://pm_test:<rastgele>@localhost:55432/papermorning_test npm test` (veritabanı ilk çalıştırmada oluşturulup işaretlenir). Üretim kimlik bilgilerini asla test ortamına vermeyin. Yalnızca birim testleri: `npm run test:unit` (veritabanı gerekmez). Testler `.env` dosyasını yüklemez; yalnızca yukarıdaki karşılaştırma için okur.
 
 **Katmanlar:** `src/config` (doğrulanmış ortam yapılandırması), `src/bootstrap` (HTTP ayarları: `/api` öneki, DTO whitelist doğrulaması), `src/core` (uygulama çapı yetenekler: health), `src/service` (entegrasyon adaptörleri: persistence), `src/domain` (iş modülleri).
