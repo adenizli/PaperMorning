@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
+import { LeaseHeartbeat } from '../../../common/persistence/lease-heartbeat';
 import { AppConfig } from '../../../config/app.config';
 import { PreferenceService, ReaderProfileModel, TopicPriority } from '../../account';
 import { ResearchQueryService, ResearchService } from '../../research';
@@ -89,27 +91,49 @@ export class PublicationService {
     }
 
     const run = claim.run;
+    const lease = new RunLease(run.id, claim.claimToken, publication.leaseSeconds, this.runs);
     try {
-      const issue = await this.execute(run, profile, issueDate);
-      return { outcome: 'READY', issue, run: await this.runs.complete(run.id, issue.id) };
+      const issue = await this.execute(run, lease, profile, issueDate);
+      return { outcome: 'READY', issue, run: await lease.complete(issue.id) };
     } catch (error) {
+      if (error instanceof ClaimLostError) {
+        // A newer worker owns this reader/day now: leave its state alone.
+        this.logger.warn(`Issue ${userId}/${issueDate}: ${error.message}`);
+        const issue = await this.issues.findByUserDate(userId, issueDate);
+        const current = await this.runs.findById(run.id);
+        if (issue?.status === IssueStatus.READY) return { outcome: 'READY', issue, run: current };
+        return {
+          outcome: 'IN_PROGRESS',
+          issue: null,
+          run: current,
+          reason: 'Taken over by another worker',
+        };
+      }
       const failure = PublicationError.from(error);
       const backoffMs = publication.retryBackoffMinutes * 60_000 * 2 ** (run.attemptCount - 1);
       this.logger.warn(
         `Issue ${userId}/${issueDate} failed at ${run.stage} (attempt ${run.attemptCount}): ${failure.kind}: ${failure.message}`,
       );
-      const failed = await this.runs.fail(run.id, {
-        kind: failure.kind,
-        message: failure.message,
-        retryable: failure.retryable,
-        nextAttemptAt: failure.retryable ? new Date(Date.now() + backoffMs) : null,
-      });
+      let failed: PublicationRunModel | null;
+      try {
+        failed = await lease.fail({
+          kind: failure.kind,
+          message: failure.message,
+          retryable: failure.retryable,
+          nextAttemptAt: failure.retryable ? new Date(Date.now() + backoffMs) : null,
+        });
+      } catch (failError) {
+        if (!(failError instanceof ClaimLostError)) throw failError;
+        failed = await this.runs.findById(run.id);
+      }
       return {
         outcome: 'FAILED',
         issue: null,
         run: failed,
         reason: `${failure.kind}: ${failure.message}`,
       };
+    } finally {
+      lease.stop();
     }
   }
 
@@ -124,6 +148,7 @@ export class PublicationService {
 
   private async execute(
     initial: PublicationRunModel,
+    lease: RunLease,
     profile: ReaderProfileModel,
     issueDate: string,
   ): Promise<IssueModel> {
@@ -133,6 +158,8 @@ export class PublicationService {
     const language = profile.reader.language;
 
     if (!checkpoint.selection) {
+      // Research may run for minutes; the background heartbeat keeps the run lease alive.
+      await lease.assertHeld();
       await this.refreshResearch(topicKeys, issueDate);
       const candidates = await this.researchQuery.listAnalyzedPapers({
         topicKeys,
@@ -151,7 +178,7 @@ export class PublicationService {
         );
       }
       checkpoint.selection = selection;
-      run = await this.runs.checkpoint(run.id, PublicationStage.WRITING, checkpoint);
+      run = await lease.checkpoint(PublicationStage.WRITING, checkpoint);
     }
 
     const selection: SelectedArticle[] = checkpoint.selection;
@@ -162,16 +189,17 @@ export class PublicationService {
     const articles: ComposedArticle[] = [];
     for (const item of selection) {
       const view = views.get(item.analysisId)!;
+      await lease.assertHeld(); // never pay for a run another worker owns
       const variant = await this.writer.getOrWrite(view, language, item.knowledgeLevel);
       articles.push({ selection: item, view, variant });
       if (checkpoint.variantIds[item.analysisId] !== variant.id) {
         checkpoint.variantIds[item.analysisId] = variant.id;
-        run = await this.runs.checkpoint(run.id, PublicationStage.WRITING, checkpoint);
+        run = await lease.checkpoint(PublicationStage.WRITING, checkpoint);
       }
     }
 
     if (!checkpoint.outlook) {
-      run = await this.runs.checkpoint(run.id, PublicationStage.OUTLOOK, checkpoint);
+      run = await lease.checkpoint(PublicationStage.OUTLOOK, checkpoint);
       const leadLevel = [...profile.topics].sort((a, b) => rank(b.priority) - rank(a.priority))[0]
         .knowledgeLevel;
       checkpoint.outlook = await this.outlook.getOrCreate(
@@ -180,7 +208,7 @@ export class PublicationService {
         leadLevel,
       );
     }
-    run = await this.runs.checkpoint(run.id, PublicationStage.RENDERING, checkpoint);
+    run = await lease.checkpoint(PublicationStage.RENDERING, checkpoint);
 
     const content = this.issues.buildContent({
       issueDate,
@@ -231,6 +259,49 @@ export class PublicationService {
       );
     }
     return byId;
+  }
+}
+
+/**
+ * The worker's hold on one publication run: every state change presents the claim's fencing token,
+ * and a background heartbeat renews the lease during long steps (research refresh, Claude calls).
+ */
+class RunLease {
+  private readonly heartbeat: LeaseHeartbeat;
+
+  constructor(
+    private readonly runId: string,
+    private readonly token: string,
+    private readonly leaseSeconds: number,
+    private readonly runs: PublicationRunRepositoryService,
+  ) {
+    this.heartbeat = new LeaseHeartbeat(
+      `Publication run ${runId}`,
+      () => runs.renew(runId, token, leaseSeconds),
+      Math.max(1_000, (leaseSeconds * 1000) / 3),
+    );
+  }
+
+  assertHeld(): Promise<void> {
+    return this.heartbeat.assertHeld();
+  }
+
+  checkpoint(stage: PublicationStage, checkpoint: PublicationCheckpoint) {
+    return this.runs.checkpoint(this.runId, this.token, stage, checkpoint, this.leaseSeconds);
+  }
+
+  async complete(issueId: string): Promise<PublicationRunModel> {
+    this.heartbeat.stop();
+    return this.runs.complete(this.runId, this.token, issueId);
+  }
+
+  async fail(error: Parameters<PublicationRunRepositoryService['fail']>[2]) {
+    this.heartbeat.stop();
+    return this.runs.fail(this.runId, this.token, error);
+  }
+
+  stop(): void {
+    this.heartbeat.stop();
   }
 }
 

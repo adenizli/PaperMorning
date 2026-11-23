@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ContentCoverage } from '../../../common/enum/research.enum';
+import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
+import { AppConfig } from '../../../config/app.config';
 import { fingerprint } from '../../../common/text/fingerprint';
 import { findUnsupportedNumbers } from '../../../common/text/numeric-claims';
 import { LlmService } from '../../../service/llm/llm.service';
@@ -13,7 +15,13 @@ import type {
   OutlookMaturity,
   OutlookReportModel,
 } from '../model/outlook-report.model';
+import { GenerationStatus } from '../model/article-variant.model';
 import { IssueRepositoryService } from '../repository/issue-repository.service';
+import {
+  OutlookGenerationRecord,
+  OutlookGenerationRepositoryService,
+  MAX_OUTLOOK_ATTEMPTS,
+} from '../repository/outlook-generation-repository.service';
 import { PublicationError } from './publication-error';
 
 export const OUTLOOK_PROMPT_VERSION = 'outlook-v1';
@@ -133,11 +141,21 @@ Kesin kurallar:
  * Builds the closing Ufuk Raporu from already-analyzed research (no re-reading of papers).
  * Reuses an identical report (same analyses, language, level, model/prompt) from any issue.
  */
+/**
+ * Writes or reuses the closing Ufuk Raporu. Coordination is keyed by the outlook fingerprint in
+ * `outlook_generation`: at most one worker pays for a fingerprint at a time, everyone else reuses
+ * the stored result, and a finished report is persisted before the issue that needs it is frozen,
+ * so a later publication failure cannot lose it.
+ */
 @Injectable()
 export class OutlookService {
+  private readonly logger = new Logger(OutlookService.name);
+
   constructor(
+    private readonly config: AppConfig,
     private readonly llm: LlmService,
     private readonly issues: IssueRepositoryService,
+    private readonly generations: OutlookGenerationRepositoryService,
   ) {}
 
   fingerprintFor(papers: OutlookPaper[], language: string, level: KnowledgeLevel): string {
@@ -151,16 +169,27 @@ export class OutlookService {
     });
   }
 
+  /** The claim outlives the longest bounded Claude call, so a healthy writer keeps it. */
+  leaseSeconds(): number {
+    const callBoundSeconds = Math.ceil(this.llm.maxCallDurationMs() / 1000);
+    return Math.max(this.config.publication.leaseSeconds, callBoundSeconds + 60);
+  }
+
   async getOrCreate(
     papers: OutlookPaper[],
     language: string,
     level: KnowledgeLevel,
+    options: { waitMs?: number; pollMs?: number } = {},
   ): Promise<OutlookReportModel> {
     if (papers.length === 0)
       throw new PublicationError('NO_CONTENT', 'Outlook needs at least one paper', false);
     const fp = this.fingerprintFor(papers, language, level);
-    const reused = await this.issues.findOutlookByFingerprint(fp);
-    if (reused) return reused;
+
+    const stored = await this.generations.findByFingerprint(fp);
+    if (stored?.status === GenerationStatus.COMPLETED) return reportOf(stored, fp);
+    // Reports frozen into issues before outlook_generation existed.
+    const legacy = await this.issues.findOutlookByFingerprint(fp);
+    if (legacy) return legacy;
     if (!this.llm.isAvailable()) {
       throw new PublicationError(
         'NOT_CONFIGURED',
@@ -169,6 +198,15 @@ export class OutlookService {
       );
     }
 
+    const claim = await this.generations.claim({
+      fingerprint: fp,
+      model: this.llm.modelFor(LlmTask.OUTLOOK),
+      promptVersion: OUTLOOK_PROMPT_VERSION,
+      leaseSeconds: this.leaseSeconds(),
+    });
+    if (claim.outcome !== 'CLAIMED') return this.waitForOther(claim.record, fp, options);
+
+    let report: OutlookReportModel;
     try {
       const result = await this.llm.generateJson({
         task: LlmTask.OUTLOOK,
@@ -177,11 +215,70 @@ export class OutlookService {
         maxTokens: 10_000,
         prompt: buildPrompt(papers, level),
       });
-      return validateOutlook(result.data, papers, { fingerprint: fp, model: result.model });
+      report = validateOutlook(result.data, papers, { fingerprint: fp, model: result.model });
     } catch (error) {
-      throw PublicationError.from(error);
+      const failure = PublicationError.from(error);
+      const recorded = await this.generations.fail(claim.record.id, claim.claimToken, failure);
+      if (!recorded) return this.afterLostClaim(claim.record, fp, options);
+      throw failure;
+    }
+    try {
+      // Persisted (shared, reusable) before any later publication step can fail.
+      return reportOf(
+        await this.generations.complete(claim.record.id, claim.claimToken, report),
+        fp,
+      );
+    } catch (error) {
+      if (error instanceof ClaimLostError) return this.afterLostClaim(claim.record, fp, options);
+      throw error;
     }
   }
+
+  /** A newer worker owns the generation: reuse its result instead of our discarded one. */
+  private async afterLostClaim(
+    record: OutlookGenerationRecord,
+    fp: string,
+    options: { waitMs?: number; pollMs?: number },
+  ): Promise<OutlookReportModel> {
+    this.logger.warn(`Ufuk Raporu ${fp.slice(0, 12)}: claim taken over; using the newer result`);
+    return this.waitForOther((await this.generations.findById(record.id)) ?? record, fp, options);
+  }
+
+  private async waitForOther(
+    busy: OutlookGenerationRecord,
+    fp: string,
+    { waitMs = 120_000, pollMs = 1_000 }: { waitMs?: number; pollMs?: number },
+  ): Promise<OutlookReportModel> {
+    const deadline = Date.now() + waitMs;
+    let current = busy;
+    for (let first = true; first || Date.now() < deadline; first = false) {
+      if (!first) {
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+        current = (await this.generations.findById(busy.id)) ?? current;
+      }
+      if (current.status === GenerationStatus.COMPLETED) return reportOf(current, fp);
+      if (current.status === GenerationStatus.FAILED) {
+        throw new PublicationError(
+          current.errorKind ?? 'OUTLOOK_FAILED',
+          current.errorMessage ?? 'Ufuk Raporu generation failed',
+          current.retryable && current.attemptCount < MAX_OUTLOOK_ATTEMPTS,
+        );
+      }
+    }
+    throw new PublicationError(
+      'IN_PROGRESS',
+      'Ufuk Raporu for this research package is being written by another worker',
+      true,
+    );
+  }
+}
+
+/** Never hand out a report stored under a different fingerprint. */
+function reportOf(record: OutlookGenerationRecord, fp: string): OutlookReportModel {
+  if (!record.report || record.report.fingerprint !== fp || record.fingerprint !== fp) {
+    throw new PublicationError('OUTLOOK_MISMATCH', 'Stored Ufuk Raporu does not match', false);
+  }
+  return record.report;
 }
 
 function buildPrompt(papers: OutlookPaper[], level: KnowledgeLevel): string {

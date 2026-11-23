@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
 import { AppConfig } from '../../../config/app.config';
 import { ContentCoverage, PublicationStatus } from '../../../common/enum/research.enum';
 import { fingerprint } from '../../../common/text/fingerprint';
@@ -86,6 +87,12 @@ export class ArticleWritingService {
     private readonly variants: ArticleVariantRepositoryService,
   ) {}
 
+  /** A variant claim outlives the longest bounded Claude call, so a healthy writer keeps it. */
+  leaseSeconds(): number {
+    const callBoundSeconds = Math.ceil(this.llm.maxCallDurationMs() / 1000);
+    return Math.max(this.config.publication.leaseSeconds, callBoundSeconds + 60);
+  }
+
   fingerprintFor(view: ResearchPaperView, language: string, level: KnowledgeLevel): string {
     return fingerprint({
       analysisId: view.analysisId,
@@ -127,10 +134,13 @@ export class ArticleWritingService {
       model: this.llm.modelFor(LlmTask.ARTICLE_WRITING),
       promptVersion: ARTICLE_PROMPT_VERSION,
       schemaVersion: ARTICLE_SCHEMA_VERSION,
-      leaseSeconds: this.config.publication.leaseSeconds,
+      leaseSeconds: this.leaseSeconds(),
     });
-    if (claim.outcome === 'COMPLETED') return claim.variant;
-    if (claim.outcome === 'BUSY') return this.waitForOther(claim.variant, options);
+    if (claim.outcome !== 'CLAIMED') {
+      return claim.outcome === 'COMPLETED'
+        ? claim.variant
+        : this.waitForOther(claim.variant, options);
+    }
 
     try {
       const result = await this.llm.generateJson({
@@ -141,7 +151,7 @@ export class ArticleWritingService {
         prompt: buildPrompt(view, level),
       });
       const content = validateArticle(result.data, sourceTextOf(view));
-      return await this.variants.complete(claim.variant.id, {
+      return await this.variants.complete(claim.variant.id, claim.claimToken, {
         content,
         model: result.model,
         inputTokens: result.inputTokens,
@@ -149,13 +159,38 @@ export class ArticleWritingService {
         costUsd: result.costUsd,
       });
     } catch (error) {
+      if (error instanceof ClaimLostError)
+        return this.afterLostClaim(claim.variant, error, options);
       const failure = PublicationError.from(error);
       this.logger.warn(
         `Article variant ${generationFingerprint.slice(0, 12)} failed: ${failure.kind}: ${failure.message}`,
       );
-      await this.variants.fail(claim.variant.id, failure.kind, failure.message, failure.retryable);
+      const recorded = await this.variants.fail(
+        claim.variant.id,
+        claim.claimToken,
+        failure.kind,
+        failure.message,
+        failure.retryable,
+      );
+      if (!recorded) {
+        return this.afterLostClaim(
+          claim.variant,
+          new ClaimLostError(`Article variant ${claim.variant.id}`),
+          options,
+        );
+      }
       throw failure;
     }
+  }
+
+  /** A newer writer owns the variant: use its result instead of our discarded one. */
+  private async afterLostClaim(
+    claimed: ArticleVariantModel,
+    error: ClaimLostError,
+    options: { waitMs?: number; pollMs?: number },
+  ): Promise<ArticleVariantModel> {
+    this.logger.warn(error.message);
+    return this.waitForOther((await this.variants.findById(claimed.id)) ?? claimed, options);
   }
 
   private async waitForOther(
