@@ -61,6 +61,15 @@ npm start                         # http://localhost:3000/api/health
 | `npm run migration:run` / `migration:revert` / `migration:show` | Derlenmiş `dist/` üzerinden migration yönetimi |
 | `npm run migration:generate -- src/service/persistence/migrations/<Ad>` | Entity değişikliğinden migration taslağı üretir (gözden geçirilerek commit edilir) |
 
+### Hesap ve oturum
+
+- Kayıt yalnızca `username`, `email`, `password` alır (`POST /api/auth/register`); fazladan alan 400 ile reddedilir. **E-posta doğrulaması yoktur.**
+- Giriş: `POST /api/auth/login` (`identifier` = kullanıcı adı veya e-posta). **3 saat sabit ömürlü** erişim belirteci; refresh/yenileme yoktur, süre dolunca yeniden giriş yapılır.
+- Tarayıcı: belirteç yalnızca `HttpOnly; SameSite=Strict; Path=/api` cookie'de tutulur (HTTPS'te `Secure`). Cookie ile yapılan yazma isteklerinde `Origin` aynı kaynak veya `CORS_ORIGINS` içinde olmalıdır.
+- Masaüstü (Electron) istemcisi: girişte `X-PaperMorning-Client: desktop` başlığı gönderir, yanıttaki `accessToken`'ı ana süreçte güvenli depolar (ör. Electron `safeStorage`) ve `Authorization: Bearer` ile kullanır. Tarayıcı güvenliğini kapatmak veya `*` CORS gerekmez.
+- Çıkış (`POST /api/auth/logout`) cookie'yi siler. Belirteç durumsuz olduğu için daha önce sızdırılmış bir belirteç 3 saat dolana kadar geçerli kalır (bilinçli MVP ödünleşimi).
+- **Operatör notu:** E-posta sahipliği doğrulanmadığından biri başkasının adresiyle kayıt olabilir. Günlük e-posta bu yüzden kayıtta değil, tercihlerden **açıkça** etkinleştirilir; `REGISTRATION_ENABLED`, `MAX_USERS` ve hız sınırı ile birlikte riski azaltır ama tamamen önlemez.
+
 ### Operatör CLI (yalnızca sunucu ortamında)
 
 Pahalı işler için herkese açık HTTP endpoint'i yoktur; operatör aynı yapılandırmayla CLI kullanır:

@@ -18,8 +18,28 @@ export class AppConfig {
     readonly database: DatabaseConfig,
     readonly llm: LlmConfig,
     readonly research: ResearchConfig,
+    readonly auth: AuthConfig,
   ) {}
 }
+
+export interface AuthConfig {
+  /** HMAC secret for the 3-hour access token. Required; at least 32 characters. */
+  jwtSecret: string;
+  cookieName: string;
+  /** Secure cookies require HTTPS; only disable for local HTTP development. */
+  cookieSecure: boolean;
+  /** Extra browser origins (besides same-origin) allowed to call the API, e.g. a desktop app origin. */
+  allowedOrigins: string[];
+  registrationEnabled: boolean;
+  /** 0 means unlimited. */
+  maxUsers: number;
+  rateLimitPerMinute: number;
+  /** Set when running behind a reverse proxy so client IPs (rate limiting) are correct. */
+  trustProxy: boolean;
+}
+
+/** Fixed by product decision: one non-refreshable credential lifetime. */
+export const ACCESS_TOKEN_TTL_SECONDS = 3 * 60 * 60;
 
 export type LlmTaskModelMap = {
   screening: string;
@@ -144,11 +164,7 @@ export function loadAppConfig(env: Env = process.env): AppConfig {
   const config = new AppConfig(
     nodeEnv,
     read.int('PORT', 3000, 1, 65535),
-    {
-      url: read.string('DATABASE_URL'),
-      ssl: read.bool('DATABASE_SSL', false),
-      logging: read.bool('DATABASE_LOGGING', false),
-    },
+    readDatabaseConfig(read),
     llm,
     {
       openAlexMailto: read.optionalString('OPENALEX_MAILTO'),
@@ -160,11 +176,29 @@ export function loadAppConfig(env: Env = process.env): AppConfig {
       maxHaikuScreeningsPerRun: read.int('RESEARCH_MAX_HAIKU_SCREENINGS_PER_RUN', 20, 0, 500),
       leaseSeconds: read.int('RESEARCH_LEASE_SECONDS', 600, 30, 7200),
     },
+    {
+      jwtSecret: read.string('JWT_SECRET'),
+      cookieName: read.string('AUTH_COOKIE_NAME', 'pm_session'),
+      cookieSecure: read.bool('AUTH_COOKIE_SECURE', true),
+      allowedOrigins: (read.optionalString('CORS_ORIGINS') ?? '')
+        .split(',')
+        .map((origin) => origin.trim().replace(/\/$/, ''))
+        .filter(Boolean),
+      registrationEnabled: read.bool('REGISTRATION_ENABLED', true),
+      maxUsers: read.int('MAX_USERS', 0, 0, 1_000_000),
+      rateLimitPerMinute: read.int('AUTH_RATE_LIMIT_PER_MINUTE', 10, 1, 1000),
+      trustProxy: read.bool('TRUST_PROXY', false),
+    },
   );
-
-  if (config.database.url && !/^postgres(ql)?:\/\//.test(config.database.url)) {
-    read.problems.push('DATABASE_URL must be a postgres:// connection URL');
+  if (config.auth.jwtSecret && config.auth.jwtSecret.length < 32) {
+    read.problems.push('JWT_SECRET must be at least 32 characters');
   }
+  if (config.auth.allowedOrigins.includes('*')) {
+    read.problems.push(
+      'CORS_ORIGINS must list explicit origins; "*" is not allowed with credentials',
+    );
+  }
+
   if (read.problems.length > 0) throw new ConfigValidationError(read.problems);
   return config;
 }
@@ -218,4 +252,24 @@ function parsePricing(read: EnvReader): Record<string, ModelPrice> {
     read.problems.push(`LLM_PRICING_JSON is invalid: ${(error as Error).message}`);
     return {};
   }
+}
+
+function readDatabaseConfig(read: EnvReader): DatabaseConfig {
+  const database = {
+    url: read.string('DATABASE_URL'),
+    ssl: read.bool('DATABASE_SSL', false),
+    logging: read.bool('DATABASE_LOGGING', false),
+  };
+  if (database.url && !/^postgres(ql)?:\/\//.test(database.url)) {
+    read.problems.push('DATABASE_URL must be a postgres:// connection URL');
+  }
+  return database;
+}
+
+/** Database settings only (used by the migration CLI, which needs no other secrets). */
+export function loadDatabaseConfig(env: Env = process.env): DatabaseConfig {
+  const read = new EnvReader(env);
+  const database = readDatabaseConfig(read);
+  if (read.problems.length > 0) throw new ConfigValidationError(read.problems);
+  return database;
 }
