@@ -43,6 +43,16 @@ export class IssueEntity {
   @Column({ type: 'integer', nullable: true })
   pdfSizeBytes!: number | null;
 
+  /**
+   * Exclusive PDF render ownership of a FROZEN issue (one renderer at a time). The PDF columns may
+   * hold a staged, verified artifact before READY; once READY the trigger freezes them.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  renderToken!: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  renderLeaseExpiresAt!: Date | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 
