@@ -75,6 +75,16 @@ curl http://127.0.0.1:3000/api/health
 - **Chromium sandbox:** Normal bir makinede `PDF_CHROMIUM_SANDBOX=true` (varsayılan). Ayrıcalıksız bir Docker konteynerinde (root olmayan kullanıcı, varsayılan seccomp) Chromium'un kendi sandbox'ı başlatılamıyor (doğrulandı: `Chromium sandboxing failed!`). Bu yüzden compose dosyası `false` kullanır. Telafi edici önlemler: konteyner root olmayan kullanıcıyla ve ek yetki olmadan çalışır; belgede JavaScript kapalıdır; tüm ağ ve `file://` istekleri engellenir; içerik tamamen kaçışlanmış (escape) sunucu verisidir. Sandbox'ı konteynerde açmak isteyen operatör, Chromium'a uygun bir seccomp profili sağlamalıdır.
 - Makine uyku/kapalıysa zamanlanmış işler çalışamaz; sürekli açık bir ortam gerekir.
 
+### Günlük zamanlayıcı (08:00 yerel saat)
+
+- **Tek sunucu süreci** dakikada bir iki tetikleme çalıştırır (hazırlık ve teslim ayrı; uzun bir hazırlık başka okurun 08:00 e-postasını geciktirmez). Kullanıcı başına cron, kuyruk veya ayrı işçi yoktur. Kalıcı otorite PostgreSQL kayıtlarıdır (`publication_run`, `issue`, `email_delivery`); bellek yalnızca aynı süreçte üst üste binmeyi engeller.
+- Her okur için yerel tarih ve saat gerçek IANA saat dilimi kurallarıyla (yaz saati dahil) hesaplanır; sunucunun saat dilimi kullanılmaz.
+- **06:00 yerel** (`SCHEDULER_PREPARE_LOCAL_TIME`): sayı hazırlığı başlar. Bu bir başlangıç hedefidir, bitiş garantisi değildir.
+- **08:00 yerel**: yalnızca açıkça abone olan okura, **bugünün** READY sayısı PDF ekiyle gönderilir. Sayı hazır değilse gecikme `publication_run.late_at` ile kaydedilir. Sayı `08:00 + SCHEDULER_LATE_WINDOW_MINUTES` içinde hazır olursa geç de olsa bir kez gönderilir. Bu pencereden sonra e-posta gönderilmez ve o gün için otomatik (ücretli) hazırlık yapılmaz; eski bir sayı asla bugünün sayısı gibi gönderilmez.
+- Saat dilimi değişikliği yalnızca sonraki günleri etkiler; aynı yerel gün için ikinci sayı veya e-posta oluşmaz.
+- **Makine uyku/kapalıysa** zamanlanmış işler çalışmaz; 08:00 teslimi için sürekli açık bir ortam gerekir. Sunucu tekrar açıldığında kaydedilmiş adımlardan devam eder.
+- Saati beklemeden deneme: `npm run cli -- scheduler:plan --at 2026-11-24T05:00:00Z` (yalnızca plan, hiçbir şey yapmaz) ve `scheduler:tick --at … [--send]` (gerçek hazırlık; e-posta yalnızca `--send` ile).
+
 ### E-posta (SMTP)
 
 - Kurulum sahibi kendi SMTP sağlayıcısını `SMTP_*` değişkenleriyle tanımlar. `SMTP_HOST` boşsa uygulama yine çalışır, sayılar ve PDF'ler üretilir; teslimatlar `DISABLED` görünür, asla `SENT` değil.

@@ -44,6 +44,11 @@ describe('architecture boundaries', () => {
     ).toEqual([]);
   });
 
+  it('the scheduler uses only public domain entrypoints (index or module), never internals', () => {
+    const internal = violations('core/scheduler', /^domain\/[^/]+\/(service|repository|model)\//);
+    expect(internal).toEqual([]);
+  });
+
   it('Account depends on no other domain and not on core/auth', () => {
     expect(violations('domain/account', /^(domain\/(research|publication)|core)\//)).toEqual([]);
   });
