@@ -126,12 +126,14 @@ describe('ResearchService runs (PostgreSQL)', () => {
   });
 
   it('resumes from the persisted ANALYSIS checkpoint after a budget stop and a restart', async () => {
-    // Worst-case pre-call estimate is ~$0.08 per Sonnet analysis (8000 max output tokens), and each
-    // fake call costs $0.007: this budget allows exactly one analysis today.
+    // The worst-case reservation of one Sonnet analysis is ~$0.09 (8000 max output tokens plus a
+    // byte-length bound on the input). The first call settles to $0.052, so a second reservation
+    // no longer fits into $0.12: exactly one analysis is paid for today.
+    fake.handler = () => ({ data: cannedAnalysis(), inputTokens: 1000, outputTokens: 5000 });
     app = await createResearchApp({
       anthropic: fake,
       sources: { search },
-      env: { RESEARCH_HAIKU_SCREENING: 'false', LLM_DAILY_BUDGET_USD: '0.085' },
+      env: { RESEARCH_HAIKU_SCREENING: 'false', LLM_DAILY_BUDGET_USD: '0.12' },
     });
     const [stopped] = await app.get(ResearchService).ensureDailyResearch(request);
     expect(stopped).toMatchObject({

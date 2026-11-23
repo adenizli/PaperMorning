@@ -11,7 +11,10 @@ FROM node:22-bookworm-slim
 ENV NODE_ENV=production \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     DATA_DIR=/data \
-    PORT=3000
+    PORT=3000 \
+    HOME=/tmp \
+    XDG_CACHE_HOME=/tmp/.cache \
+    XDG_CONFIG_HOME=/tmp/.config
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
@@ -26,5 +29,6 @@ RUN npx playwright install --with-deps --only-shell chromium \
 USER node
 EXPOSE 3000
 VOLUME ["/data"]
-# Apply pending migrations explicitly, then start (schema sync is always off).
-CMD ["sh", "-c", "npm run migration:run && node dist/main.js"]
+# Apply pending migrations explicitly, then start (schema sync is always off). Runs node directly
+# (no npm), so the root filesystem can be mounted read-only; HOME/XDG point at the /tmp tmpfs.
+CMD ["sh", "-c", "node node_modules/typeorm/cli.js migration:run -d dist/service/persistence/data-source.js && exec node dist/main.js"]

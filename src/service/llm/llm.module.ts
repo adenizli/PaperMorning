@@ -16,7 +16,8 @@ import { ANTHROPIC_CLIENT, LlmService } from './llm.service';
           ? new Anthropic({
               apiKey: config.llm.apiKey,
               timeout: config.llm.timeoutMs,
-              maxRetries: 2,
+              // LlmService retries itself so that every request sent has its own budget reservation.
+              maxRetries: 0,
             })
           : null,
     },

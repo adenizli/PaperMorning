@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
 import {
   ArticleContent,
   ArticleVariantModel,
@@ -25,10 +26,10 @@ export type VariantClaimInput = Pick<
   | 'schemaVersion'
 > & { leaseSeconds: number };
 
-export type VariantClaim = {
-  outcome: 'CLAIMED' | 'COMPLETED' | 'BUSY';
-  variant: ArticleVariantModel;
-};
+export type VariantClaim =
+  /** `claimToken` fences completion/failure: a takeover replaces it. */
+  | { outcome: 'CLAIMED'; variant: ArticleVariantModel; claimToken: string }
+  | { outcome: 'COMPLETED' | 'BUSY'; variant: ArticleVariantModel };
 
 @Injectable()
 export class ArticleVariantRepositoryService {
@@ -51,26 +52,30 @@ export class ArticleVariantRepositoryService {
     return (await this.repo.findBy({ id: In(ids) })).map(toModel);
   }
 
-  /** Same single-statement claim protocol as research analyses: one billable writer per key. */
+  /**
+   * Same single-statement claim protocol as research analyses: one billable writer per key, and a
+   * fresh fencing token per claim so a writer whose lease was taken over cannot overwrite it.
+   */
   async claim(input: VariantClaimInput): Promise<VariantClaim> {
-    const rows: { id: string }[] = await this.repo.query(
+    const rows: { id: string; claim_token: string }[] = await this.repo.query(
       `INSERT INTO article_variant
          (analysis_id, analysis_fingerprint, language, knowledge_level, generation_fingerprint,
           status, source_references, coverage, publication_status, model, prompt_version,
-          schema_version, attempt_count, retryable, lease_expires_at)
+          schema_version, attempt_count, retryable, lease_expires_at, claim_token)
        VALUES ($1, $2, $3, $4, $5, 'RUNNING', $6, $7, $8, $9, $10, $11, 1, true,
-               now() + make_interval(secs => $12))
+               now() + make_interval(secs => $12), gen_random_uuid())
        ON CONFLICT (generation_fingerprint) DO UPDATE
          SET status = 'RUNNING',
              attempt_count = article_variant.attempt_count + 1,
              lease_expires_at = EXCLUDED.lease_expires_at,
+             claim_token = EXCLUDED.claim_token,
              error_kind = NULL,
              error_message = NULL,
              updated_at = now()
        WHERE (article_variant.status = 'FAILED' AND article_variant.retryable
                AND article_variant.attempt_count < $13)
           OR (article_variant.status = 'RUNNING' AND article_variant.lease_expires_at < now())
-       RETURNING id`,
+       RETURNING id, claim_token`,
       [
         input.analysisId,
         input.analysisFingerprint,
@@ -90,13 +95,15 @@ export class ArticleVariantRepositoryService {
     const variant = toModel(
       await this.repo.findOneByOrFail({ generationFingerprint: input.generationFingerprint }),
     );
-    if (rows.length > 0) return { outcome: 'CLAIMED', variant };
+    if (rows.length > 0) return { outcome: 'CLAIMED', variant, claimToken: rows[0].claim_token };
     if (variant.status === GenerationStatus.COMPLETED) return { outcome: 'COMPLETED', variant };
     return { outcome: 'BUSY', variant };
   }
 
+  /** Stores the article while the claim is held; ClaimLostError for a stale writer. */
   async complete(
     id: string,
+    claimToken: string,
     result: {
       content: ArticleContent;
       model: string;
@@ -105,7 +112,7 @@ export class ArticleVariantRepositoryService {
       costUsd: number;
     },
   ): Promise<ArticleVariantModel> {
-    await this.repo
+    const updated = await this.repo
       .createQueryBuilder()
       .update()
       .set({
@@ -117,19 +124,27 @@ export class ArticleVariantRepositoryService {
         costUsd: result.costUsd,
         completedAt: () => 'now()',
         leaseExpiresAt: null,
+        claimToken: null,
       })
-      .where('id = :id AND status = :running', { id, running: GenerationStatus.RUNNING })
+      .where('id = :id AND claim_token = :claimToken AND status = :running', {
+        id,
+        claimToken,
+        running: GenerationStatus.RUNNING,
+      })
       .execute();
+    if (!updated.affected) throw new ClaimLostError(`Article variant ${id}`);
     return toModel(await this.repo.findOneByOrFail({ id }));
   }
 
+  /** Records a failure while the claim is held; false if a newer writer owns the row. */
   async fail(
     id: string,
+    claimToken: string,
     errorKind: string,
     errorMessage: string,
     retryable: boolean,
-  ): Promise<void> {
-    await this.repo
+  ): Promise<boolean> {
+    const result = await this.repo
       .createQueryBuilder()
       .update()
       .set({
@@ -138,9 +153,15 @@ export class ArticleVariantRepositoryService {
         errorMessage: errorMessage.slice(0, 2000),
         retryable,
         leaseExpiresAt: null,
+        claimToken: null,
       })
-      .where('id = :id AND status = :running', { id, running: GenerationStatus.RUNNING })
+      .where('id = :id AND claim_token = :claimToken AND status = :running', {
+        id,
+        claimToken,
+        running: GenerationStatus.RUNNING,
+      })
       .execute();
+    return (result.affected ?? 0) > 0;
   }
 }
 

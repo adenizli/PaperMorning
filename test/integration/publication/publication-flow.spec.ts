@@ -170,7 +170,8 @@ describe('PublicationService (PostgreSQL)', () => {
     expect(pdf.rendered[0]).toEqual(content); // the renderer saw exactly the served snapshot
     expect(issue!.status).toBe('READY');
     expect(storage.files.get(issue!.pdfStorageKey!)!.subarray(0, 5).toString()).toBe('%PDF-');
-    expect(issue!.pdfStorageKey).toBe(`issues/${a}/${issue!.id}.pdf`);
+    // Content-addressed: the key names the exact bytes it holds.
+    expect(issue!.pdfStorageKey).toBe(`issues/${a}/${issue!.id}-${issue!.pdfSha256}.pdf`);
   });
 
   it('is idempotent per reader/date under repeated and concurrent triggers', async () => {

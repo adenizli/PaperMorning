@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
 import type { ContentCoverage } from '../../../common/enum/research.enum';
 import {
   AnalysisStatus,
@@ -15,7 +16,8 @@ import { toVersionModel } from './paper-version-repository.service';
 export const MAX_ANALYSIS_ATTEMPTS = 3;
 
 export type ClaimOutcome =
-  | { outcome: 'CLAIMED'; analysis: PaperAnalysisModel }
+  /** `claimToken` fences every later change: a newer claim invalidates it. */
+  | { outcome: 'CLAIMED'; analysis: PaperAnalysisModel; claimToken: string }
   | { outcome: 'COMPLETED'; analysis: PaperAnalysisModel }
   | { outcome: 'BUSY'; analysis: PaperAnalysisModel };
 
@@ -53,25 +55,29 @@ export class PaperAnalysisRepositoryService {
   /**
    * Atomically claims the right to perform one billable analysis. Exactly one caller can win the
    * INSERT or the takeover of a retryable FAILED row / an expired RUNNING lease; everyone else
-   * sees the existing row. Runs as a single statement, never across a network call.
+   * sees the existing row. Runs as a single statement, never across a network call. Every claim
+   * (insert or takeover) gets a fresh fencing token, so a worker whose lease expired can no longer
+   * complete or fail the row once someone else has taken it over.
    */
   async claim(input: AnalysisClaimInput): Promise<ClaimOutcome> {
-    const rows: { id: string }[] = await this.repo.query(
+    const rows: { id: string; claim_token: string }[] = await this.repo.query(
       `INSERT INTO paper_analysis
          (fingerprint, paper_version_id, status, coverage, model, prompt_version, schema_version,
-          attempt_count, retryable, lease_expires_at)
-       VALUES ($1, $2, 'RUNNING', $3, $4, $5, $6, 1, true, now() + make_interval(secs => $7))
+          attempt_count, retryable, lease_expires_at, claim_token)
+       VALUES ($1, $2, 'RUNNING', $3, $4, $5, $6, 1, true, now() + make_interval(secs => $7),
+               gen_random_uuid())
        ON CONFLICT (fingerprint) DO UPDATE
          SET status = 'RUNNING',
              attempt_count = paper_analysis.attempt_count + 1,
              lease_expires_at = EXCLUDED.lease_expires_at,
+             claim_token = EXCLUDED.claim_token,
              error_kind = NULL,
              error_message = NULL,
              updated_at = now()
        WHERE (paper_analysis.status = 'FAILED' AND paper_analysis.retryable
                AND paper_analysis.attempt_count < $8)
           OR (paper_analysis.status = 'RUNNING' AND paper_analysis.lease_expires_at < now())
-       RETURNING id`,
+       RETURNING id, claim_token`,
       [
         input.fingerprint,
         input.paperVersionId,
@@ -84,14 +90,36 @@ export class PaperAnalysisRepositoryService {
       ],
     );
     const analysis = toModel(await this.repo.findOneByOrFail({ fingerprint: input.fingerprint }));
-    if (rows.length > 0) return { outcome: 'CLAIMED', analysis };
+    if (rows.length > 0) return { outcome: 'CLAIMED', analysis, claimToken: rows[0].claim_token };
     if (analysis.status === AnalysisStatus.COMPLETED) return { outcome: 'COMPLETED', analysis };
     return { outcome: 'BUSY', analysis };
   }
 
-  /** Commits a result only while the claim is still held (status RUNNING). */
+  /**
+   * Extends the lease while the caller still owns the claim (same token, still RUNNING).
+   * Returns false when the claim was lost; the caller must then stop without paying or writing.
+   */
+  async renew(id: string, claimToken: string, leaseSeconds: number): Promise<boolean> {
+    const result = await this.repo
+      .createQueryBuilder()
+      .update()
+      .set({ leaseExpiresAt: () => `now() + make_interval(secs => ${Math.ceil(leaseSeconds)})` })
+      .where('id = :id AND claim_token = :claimToken AND status = :running', {
+        id,
+        claimToken,
+        running: AnalysisStatus.RUNNING,
+      })
+      .execute();
+    return (result.affected ?? 0) > 0;
+  }
+
+  /**
+   * Commits a result only while the caller still owns the claim. A stale worker (token replaced by
+   * a takeover) gets ClaimLostError and must not overwrite the newer owner's row.
+   */
   async complete(
     id: string,
+    claimToken: string,
     result: {
       content: PaperAnalysisContent;
       sourceReferences: SourceReferenceModel[];
@@ -101,7 +129,7 @@ export class PaperAnalysisRepositoryService {
       costUsd: number;
     },
   ): Promise<PaperAnalysisModel> {
-    await this.repo
+    const updated = await this.repo
       .createQueryBuilder()
       .update()
       .set({
@@ -114,19 +142,27 @@ export class PaperAnalysisRepositoryService {
         costUsd: result.costUsd,
         completedAt: () => 'now()',
         leaseExpiresAt: null,
+        claimToken: null,
       })
-      .where('id = :id AND status = :running', { id, running: AnalysisStatus.RUNNING })
+      .where('id = :id AND claim_token = :claimToken AND status = :running', {
+        id,
+        claimToken,
+        running: AnalysisStatus.RUNNING,
+      })
       .execute();
+    if (!updated.affected) throw new ClaimLostError(`Paper analysis ${id}`);
     return toModel(await this.repo.findOneByOrFail({ id }));
   }
 
+  /** Records a failure only while the caller still owns the claim; returns false if it was lost. */
   async fail(
     id: string,
+    claimToken: string,
     errorKind: string,
     errorMessage: string,
     retryable: boolean,
-  ): Promise<void> {
-    await this.repo
+  ): Promise<boolean> {
+    const result = await this.repo
       .createQueryBuilder()
       .update()
       .set({
@@ -135,9 +171,15 @@ export class PaperAnalysisRepositoryService {
         errorMessage: errorMessage.slice(0, 2000),
         retryable,
         leaseExpiresAt: null,
+        claimToken: null,
       })
-      .where('id = :id AND status = :running', { id, running: AnalysisStatus.RUNNING })
+      .where('id = :id AND claim_token = :claimToken AND status = :running', {
+        id,
+        claimToken,
+        running: AnalysisStatus.RUNNING,
+      })
       .execute();
+    return (result.affected ?? 0) > 0;
   }
 
   /** Completed analyses (current prompt/schema) with their versions, for the public query API. */
