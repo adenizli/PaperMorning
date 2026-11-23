@@ -57,6 +57,10 @@ export class ResearchRunEntity {
   @Column({ type: 'timestamptz', nullable: true })
   leaseExpiresAt!: Date | null;
 
+  /** Fencing token of the current claim; every state change must present it. */
+  @Column({ type: 'uuid', nullable: true })
+  claimToken!: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   startedAt!: Date;
 
