@@ -28,8 +28,8 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-papermorning}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-papermorning}
       DATA_DIR: /data
       PORT: '3000'
-      # See README: inside an unprivileged container Chromium's own sandbox cannot start;
-      # the container (non-root, no extra capabilities, JS off, all network blocked) is the boundary.
+      # See README: inside an unprivileged container Chromium's own sandbox cannot start, so the
+      # container below is the isolation boundary. This is weaker than Chromium's sandbox.
       PDF_CHROMIUM_SANDBOX: ${PDF_CHROMIUM_SANDBOX:-false}
     depends_on:
       postgres:
@@ -38,6 +38,18 @@ services:
       - '127.0.0.1:${SERVER_PORT:-3000}:3000'
     volumes:
       - papermorning-data:/data
+    # Hardening for the in-container Chromium (verified to still render; see README):
+    user: node
+    init: true # reaps orphaned Chromium processes
+    read_only: true # only /data (volume) and /tmp (tmpfs) are writable
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=256m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 1536m
+    memswap_limit: 1536m
 
 volumes:
   postgres-data:

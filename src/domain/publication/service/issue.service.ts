@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { ContentCoverage, PublicationStatus } from '../../../common/enum/research.enum';
 import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
+import { AppConfig } from '../../../config/app.config';
 import { fingerprint, sha256Hex } from '../../../common/text/fingerprint';
 import { safeHttpUrl } from '../../../common/text/escape-html';
 import { findTopic } from '../../../common/topic/topic-catalog';
@@ -22,7 +23,7 @@ import { FeedbackRepositoryService } from '../repository/feedback-repository.ser
 import { IssueRepositoryService } from '../repository/issue-repository.service';
 import { PublicationError } from './publication-error';
 
-/** Render ownership lease; far above the renderer's own timeout plus storage verification. */
+/** Minimum render ownership lease (see IssueService.renderLeaseSeconds). */
 export const RENDER_LEASE_SECONDS = 300;
 
 interface StagedPdf {
@@ -49,6 +50,7 @@ export interface ComposedArticle {
 @Injectable()
 export class IssueService {
   constructor(
+    private readonly config: AppConfig,
     private readonly issues: IssueRepositoryService,
     private readonly feedback: FeedbackRepositoryService,
     @Inject(PDF_RENDERER) private readonly pdfRenderer: PdfRenderer,
@@ -155,7 +157,7 @@ export class IssueService {
     });
     if (issue.status === IssueStatus.READY) return issue;
 
-    const renderToken = await this.issues.claimRender(issue.id, RENDER_LEASE_SECONDS);
+    const renderToken = await this.issues.claimRender(issue.id, this.renderLeaseSeconds());
     if (!renderToken) return this.awaitOtherRenderer(issue.id, options);
     try {
       const pdf = (await this.reuseStagedPdf(issue)) ?? (await this.renderAndStore(issue));
@@ -167,6 +169,14 @@ export class IssueService {
       await this.issues.releaseRender(issue.id, renderToken);
       throw error;
     }
+  }
+
+  /**
+   * Render ownership must outlive one bounded render (browser launch and page rendering each
+   * capped by PDF_TIMEOUT_MS) plus storage verification.
+   */
+  renderLeaseSeconds(): number {
+    return Math.max(RENDER_LEASE_SECONDS, Math.ceil((2 * this.config.pdf.timeoutMs) / 1000) + 60);
   }
 
   /** A stored, still-intact PDF from an interrupted earlier attempt. */
