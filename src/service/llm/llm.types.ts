@@ -29,12 +29,26 @@ export class LlmError extends Error {
   constructor(
     readonly kind: LlmErrorKind,
     message: string,
+    /**
+     * Set only when the provider answered with a definitive, unbilled transient error (HTTP 429,
+     * 5xx, 529), so the same request may be sent again immediately. Never set for outcomes that
+     * may have been processed (timeouts, dropped connections).
+     */
+    readonly transient: { retryAfterMs: number | null } | null = null,
   ) {
     super(message);
     this.name = 'LlmError';
     this.retryable = RETRYABLE.has(kind);
   }
 }
+
+/**
+ * Ledger states. RESERVED: worst-case cost held before the call (also what a crash leaves behind,
+ * so it keeps counting). SUCCEEDED/FAILED: settled to the provider-reported usage (0 for a
+ * definitive error response, which is not billed). UNKNOWN: the outcome is uncertain (timeout or
+ * dropped connection), so the worst-case reservation stays charged.
+ */
+export type LlmUsageStatus = 'RESERVED' | 'SUCCEEDED' | 'FAILED' | 'UNKNOWN';
 
 export interface LlmJsonRequest {
   task: LlmTask;

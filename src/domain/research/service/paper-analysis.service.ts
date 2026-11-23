@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
 import { AppConfig } from '../../../config/app.config';
 import { ContentCoverage } from '../../../common/enum/research.enum';
 import { fingerprint } from '../../../common/text/fingerprint';
@@ -15,6 +16,7 @@ import { AnalysisValidationError, validateAnalysisOutput } from './analysis-outp
 
 export const ANALYSIS_PROMPT_VERSION = 'analysis-v1';
 export const ANALYSIS_SCHEMA_VERSION = 1;
+const LEASE_MARGIN_SECONDS = 60;
 
 export type AnalysisOutcome =
   | { status: 'COMPLETED'; analysis: PaperAnalysisModel; reused: boolean }
@@ -98,6 +100,16 @@ export class PaperAnalysisService {
     private readonly papers: PaperRepositoryService,
   ) {}
 
+  /**
+   * Lease for one analysis claim. It always outlives the longest possible Claude call (timeout x
+   * attempts + back-off), so a healthy worker cannot lose its claim mid-call and a second worker
+   * cannot start a duplicate paid call; fencing tokens still reject any stale write.
+   */
+  leaseSeconds(): number {
+    const callBoundSeconds = Math.ceil(this.llm.maxCallDurationMs() / 1000);
+    return Math.max(this.config.research.leaseSeconds, callBoundSeconds + LEASE_MARGIN_SECONDS);
+  }
+
   fingerprintFor(
     version: PaperVersionModel,
     model = this.llm.modelFor(LlmTask.PAPER_ANALYSIS),
@@ -141,18 +153,19 @@ export class PaperAnalysisService {
       model,
       promptVersion: ANALYSIS_PROMPT_VERSION,
       schemaVersion: ANALYSIS_SCHEMA_VERSION,
-      leaseSeconds: this.config.research.leaseSeconds,
+      leaseSeconds: this.leaseSeconds(),
     });
     if (claim.outcome === 'COMPLETED')
       return { status: 'COMPLETED', analysis: claim.analysis, reused: true };
     if (claim.outcome === 'BUSY') return this.waitForOther(claim.analysis, options);
 
-    return this.performClaimed(claim.analysis, version, paper);
+    return this.performClaimed(claim.analysis, claim.claimToken, version, paper);
   }
 
   /** Runs outside any DB transaction: the claim is already committed. */
   private async performClaimed(
     claimed: PaperAnalysisModel,
+    claimToken: string,
     version: PaperVersionModel,
     paper: PaperModel,
   ): Promise<AnalysisOutcome> {
@@ -167,7 +180,7 @@ export class PaperAnalysisService {
         prompt: buildPrompt(version, paper),
       });
       const content = validateAnalysisOutput(result.data, sourceText, abstractOnly);
-      const analysis = await this.analyses.complete(claimed.id, {
+      const analysis = await this.analyses.complete(claimed.id, claimToken, {
         content,
         sourceReferences: buildSourceReferences(version, paper),
         model: result.model,
@@ -175,18 +188,28 @@ export class PaperAnalysisService {
         outputTokens: result.outputTokens,
         costUsd: result.costUsd,
       });
-      if (analysis.status !== AnalysisStatus.COMPLETED) {
-        return { status: 'IN_PROGRESS', analysis };
-      }
       return { status: 'COMPLETED', analysis, reused: false };
     } catch (error) {
+      if (error instanceof ClaimLostError) return this.afterLostClaim(claimed, error);
       const { kind, retryable } = classify(error);
       const message = (error as Error).message;
       this.logger.warn(`Analysis ${claimed.fingerprint.slice(0, 12)} failed (${kind}): ${message}`);
-      await this.analyses.fail(claimed.id, kind, message, retryable);
+      if (!(await this.analyses.fail(claimed.id, claimToken, kind, message, retryable))) {
+        return this.afterLostClaim(claimed, new ClaimLostError(`Paper analysis ${claimed.id}`));
+      }
       const analysis = await this.analyses.findById(claimed.id);
       return { status: 'FAILED', analysis, errorKind: kind, message, retryable };
     }
+  }
+
+  /** A newer worker owns the row: report its state instead of our discarded result. */
+  private async afterLostClaim(
+    claimed: PaperAnalysisModel,
+    error: ClaimLostError,
+  ): Promise<AnalysisOutcome> {
+    this.logger.warn(error.message);
+    const current = (await this.analyses.findById(claimed.id)) ?? claimed;
+    return this.waitForOther(current, {});
   }
 
   private async waitForOther(
