@@ -16,3 +16,4 @@ export type {
   ResearchEvidenceModel,
   SourceReferenceModel,
 } from './model/paper-analysis.model';
+export type { PaperModel } from './model/paper.model';

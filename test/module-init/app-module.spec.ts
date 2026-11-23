@@ -9,6 +9,9 @@ import { AccountModule } from '../../src/domain/account/account.module';
 import { AccountService } from '../../src/domain/account/service/account.service';
 import { PreferenceService } from '../../src/domain/account/service/preference.service';
 import { AuthService } from '../../src/core/auth/auth.service';
+import { PublicationModule } from '../../src/domain/publication/publication.module';
+import { DeliveryService } from '../../src/domain/publication/service/delivery.service';
+import { PublicationService } from '../../src/domain/publication/service/publication.service';
 import { HealthController } from '../../src/core/health/health.controller';
 import { DatabaseHealthService } from '../../src/service/persistence/database-health.service';
 import { createTestApp } from '../support/test-app';
@@ -47,6 +50,16 @@ describe('AppModule initialization', () => {
       PreferenceService,
     ]);
     expect(Reflect.getMetadata('imports', AccountModule)).toHaveLength(1); // only its repository module
+  });
+
+  it('wires PublicationModule with six services and exports only the public entrypoints', () => {
+    expect(app.get(PublicationService)).toBeInstanceOf(PublicationService);
+    expect(app.get(DeliveryService)).toBeInstanceOf(DeliveryService);
+    expect(Reflect.getMetadata('providers', PublicationModule)).toHaveLength(6);
+    expect(Reflect.getMetadata('exports', PublicationModule)).toEqual([
+      PublicationService,
+      DeliveryService,
+    ]);
   });
 
   it('never synchronizes the schema automatically', () => {
