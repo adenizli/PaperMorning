@@ -10,6 +10,7 @@ export { ResearchService } from './service/research.service';
 export { ResearchQueryService } from './service/research-query.service';
 export type { ResearchPaperView, ResearchQuery } from './model/research-paper-view.model';
 export type { DailyResearchRequest } from './model/research-request.model';
+export { ResearchRunStatus } from './model/research-run.model';
 export type { ResearchRunModel } from './model/research-run.model';
 export type {
   PaperAnalysisContent,

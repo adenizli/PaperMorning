@@ -171,7 +171,7 @@ describe('DailyPublicationScheduler (simulated clock, PostgreSQL)', () => {
     await db.query(`UPDATE publication_run SET next_attempt_at = now() - interval '1 second'`);
     const entries = await minute('2026-11-24T07:01:00Z'); // 10:01, window is 120 minutes
     expect(entries.find((e) => e.userId === istanbul)!.delivery).toBe('MISSED_CUTOFF');
-    expect((await issues()).find((i: { user_id: string }) => i.user_id === istanbul).status).toBe(
+    expect((await issues()).find((i: { user_id: string }) => i.user_id === istanbul)!.status).toBe(
       'FROZEN',
     );
 

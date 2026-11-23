@@ -3,7 +3,7 @@ import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
 import { LeaseHeartbeat } from '../../../common/persistence/lease-heartbeat';
 import { AppConfig } from '../../../config/app.config';
 import { PreferenceService, ReaderProfileModel, TopicPriority } from '../../account';
-import { ResearchQueryService, ResearchService } from '../../research';
+import { ResearchQueryService, ResearchRunStatus, ResearchService } from '../../research';
 import type { ResearchPaperView } from '../../research';
 import { shiftDate } from '../../../common/time/calendar-date';
 import { IssueModel, IssueStatus } from '../model/issue.model';
@@ -19,6 +19,10 @@ import { EditorialService } from './editorial.service';
 import { ComposedArticle, IssueService } from './issue.service';
 import { OutlookService } from './outlook.service';
 import { PublicationError } from './publication-error';
+
+/** Bounded wait for another worker's in-flight research run of the same topic/day. */
+const RESEARCH_WAIT_MS = 20 * 60_000;
+const RESEARCH_POLL_MS = 2_000;
 
 export type PrepareOutcome = 'READY' | 'IN_PROGRESS' | 'FAILED' | 'SKIPPED';
 
@@ -160,7 +164,7 @@ export class PublicationService {
     if (!checkpoint.selection) {
       // Research may run for minutes; the background heartbeat keeps the run lease alive.
       await lease.assertHeld();
-      await this.refreshResearch(topicKeys, issueDate);
+      await this.refreshResearch(topicKeys, issueDate, lease);
       const candidates = await this.researchQuery.listAnalyzedPapers({
         topicKeys,
         publishedFrom: shiftDate(issueDate, -this.config.research.lookbackDays),
@@ -226,15 +230,37 @@ export class PublicationService {
     });
   }
 
-  /** Shared research is refreshed once per topic/day; failures there do not block existing analyses. */
-  private async refreshResearch(topicKeys: string[], issueDate: string): Promise<void> {
+  /**
+   * Shared research is refreshed once per topic/day; failures there do not block existing
+   * analyses. When another reader's preparation is running the same topic's research right now
+   * (likely with concurrent preparation), wait for it (bounded) instead of selecting from an
+   * incomplete set; an abandoned run is taken over by a later call once its lease expires.
+   */
+  private async refreshResearch(
+    topicKeys: string[],
+    issueDate: string,
+    lease: RunLease,
+  ): Promise<void> {
+    const deadline = Date.now() + RESEARCH_WAIT_MS;
+    let pending = topicKeys;
     try {
-      await this.research.ensureDailyResearch({
-        topicKeys,
-        runDate: issueDate,
-        trigger: 'PUBLICATION',
-      });
+      for (;;) {
+        const runs = await this.research.ensureDailyResearch({
+          topicKeys: pending,
+          runDate: issueDate,
+          trigger: 'PUBLICATION',
+        });
+        pending = runs.filter((r) => r.status === ResearchRunStatus.RUNNING).map((r) => r.topicKey);
+        if (pending.length === 0) return;
+        if (Date.now() >= deadline) {
+          this.logger.warn(`Research still running for ${pending.join(', ')}; using what exists`);
+          return;
+        }
+        await lease.assertHeld();
+        await new Promise((resolve) => setTimeout(resolve, RESEARCH_POLL_MS));
+      }
     } catch (error) {
+      if (error instanceof ClaimLostError) throw error;
       this.logger.warn(
         `Research refresh failed, using existing analyses: ${(error as Error).message}`,
       );

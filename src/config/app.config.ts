@@ -39,6 +39,11 @@ export interface SchedulerConfig {
    * After that the issue stays on the web/archive but no email is sent for that day.
    */
   lateWindowMinutes: number;
+  /**
+   * Readers prepared at the same time by one process. Bounded so Claude/Chromium load stays
+   * predictable; spend is additionally capped by the atomic daily budget reservations.
+   */
+  preparationConcurrency: number;
 }
 
 export type SmtpSecurity = 'tls' | 'starttls' | 'none';
@@ -286,6 +291,7 @@ export function loadAppConfig(env: Env = process.env): AppConfig {
       prepareLocalTime: read.string('SCHEDULER_PREPARE_LOCAL_TIME', '06:00'),
       deliveryLocalTime: '08:00',
       lateWindowMinutes: read.int('SCHEDULER_LATE_WINDOW_MINUTES', 120, 0, 720),
+      preparationConcurrency: read.int('SCHEDULER_PREPARATION_CONCURRENCY', 2, 1, 8),
     },
   );
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(config.scheduler.prepareLocalTime)) {
