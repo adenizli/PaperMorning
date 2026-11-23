@@ -84,8 +84,13 @@ describe('PdfService (real Chromium)', () => {
     // The slot is released only after the late-launched browser has been closed.
     const next = await service().renderHtml('<p>after timeout</p>');
     expect(next.subarray(0, 5).toString()).toBe('%PDF-');
-    await new Promise((r) => setTimeout(r, 1500));
     await pdfService.renderHtml('<p>slot reusable</p>').catch(() => undefined);
+    // That last call's own launch is torn down in the background after it returned; give the OS
+    // time to finish (slower on Linux CI). A real leak never reaches 0 and still fails here.
+    const deadline = Date.now() + 10_000;
+    while (childChromiumCount() > 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
     expect(childChromiumCount()).toBe(0);
   });
 
