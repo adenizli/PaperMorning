@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
 import { AppConfig } from '../../../config/app.config';
 import { shiftDate } from '../../../common/time/calendar-date';
 import { findTopic } from '../../../common/topic/topic-catalog';
@@ -43,16 +44,19 @@ export class ResearchService {
     const maxCandidates =
       request.maxCandidatesPerTopic ?? this.config.research.maxCandidatesPerTopic;
 
+    // The lease must outlive the longest single step between heartbeats (one bounded analysis).
+    const leaseSeconds = Math.max(this.config.research.leaseSeconds, this.analysis.leaseSeconds());
     const claim = await this.runs.claim({
       runKey: `daily:${topicKey}:${request.runDate}`,
       trigger: request.trigger,
       topicKey,
       windowFrom: shiftDate(request.runDate, -lookbackDays),
       windowUntil: request.runDate,
-      leaseSeconds: this.config.research.leaseSeconds,
+      leaseSeconds,
     });
     if (claim.outcome !== 'CLAIMED') return claim.run;
 
+    const token = claim.claimToken;
     let run = claim.run;
     const counts: ResearchRunCounts = { ...run.counts };
     const errors: string[] = [];
@@ -64,15 +68,20 @@ export class ResearchService {
           this.config.research.discoveryLimitPerSource,
         );
         errors.push(...found.failures);
-        if (found.allSourcesFailed) return await this.runs.fail(run.id, errors);
+        if (found.allSourcesFailed) return await this.runs.fail(run.id, token, errors);
         counts.discovered = found.discovered;
         counts.newVersions = found.newVersions;
-        run = await this.runs.checkpoint(run.id, {
-          stage: ResearchRunStage.SCREENING,
-          discoveredVersionIds: found.versionIds,
-          counts,
-          errors,
-        });
+        run = await this.runs.checkpoint(
+          run.id,
+          token,
+          {
+            stage: ResearchRunStage.SCREENING,
+            discoveredVersionIds: found.versionIds,
+            counts,
+            errors,
+          },
+          leaseSeconds,
+        );
       }
 
       if (run.stage === ResearchRunStage.SCREENING) {
@@ -84,16 +93,25 @@ export class ResearchService {
         counts.screened = screened.screened;
         counts.accepted = screened.accepted;
         counts.candidates = screened.candidateVersionIds.length;
-        run = await this.runs.checkpoint(run.id, {
-          stage: ResearchRunStage.ANALYSIS,
-          candidateVersionIds: screened.candidateVersionIds,
-          counts,
-        });
+        run = await this.runs.checkpoint(
+          run.id,
+          token,
+          {
+            stage: ResearchRunStage.ANALYSIS,
+            candidateVersionIds: screened.candidateVersionIds,
+            counts,
+          },
+          leaseSeconds,
+        );
       }
 
       if (run.stage === ResearchRunStage.ANALYSIS) {
         counts.analyzed = counts.reused = counts.analysisFailed = 0;
         for (const versionId of run.candidateVersionIds) {
+          // Heartbeat before every paid step; a lost claim stops this worker before it spends.
+          if (!(await this.runs.renew(run.id, token, leaseSeconds))) {
+            throw new ClaimLostError(`Research run ${run.runKey}`);
+          }
           const outcome = await this.analysis.analyze(versionId);
           if (outcome.status === 'COMPLETED') {
             if (outcome.reused) counts.reused++;
@@ -102,16 +120,26 @@ export class ResearchService {
             counts.analysisFailed++;
             errors.push(`analysis ${versionId}: ${outcome.errorKind}: ${outcome.message}`);
             if (RUN_STOPPING_ERRORS.has(outcome.errorKind)) {
-              await this.runs.checkpoint(run.id, { counts });
-              return await this.runs.fail(run.id, [...run.errors, ...errors]);
+              await this.runs.checkpoint(run.id, token, { counts }, leaseSeconds);
+              return await this.runs.fail(run.id, token, [...run.errors, ...errors]);
             }
           }
         }
       }
-      return await this.runs.complete(run.id, counts, [...run.errors, ...errors]);
+      return await this.runs.complete(run.id, token, counts, [...run.errors, ...errors]);
     } catch (error) {
+      if (error instanceof ClaimLostError) {
+        // Another worker owns the run now; leave its state alone.
+        this.logger.warn(error.message);
+        return (await this.runs.findById(run.id)) ?? run;
+      }
       this.logger.error(`Research run ${run.runKey} failed: ${(error as Error).message}`);
-      return this.runs.fail(run.id, [...errors, (error as Error).message]);
+      try {
+        return await this.runs.fail(run.id, token, [...errors, (error as Error).message]);
+      } catch (failError) {
+        if (!(failError instanceof ClaimLostError)) throw failError;
+        return (await this.runs.findById(run.id)) ?? run;
+      }
     }
   }
 }

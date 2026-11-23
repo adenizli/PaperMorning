@@ -6,7 +6,8 @@ import { FILE_STORAGE } from '../../src/service/file-storage/file-storage';
 import { ANTHROPIC_CLIENT } from '../../src/service/llm/llm.service';
 import { MAIL_TRANSPORT } from '../../src/service/mail/mail-transport';
 import { PDF_RENDERER } from '../../src/service/pdf/pdf-renderer';
-import type { FakeMailTransport, FakePdfRenderer, InMemoryFileStorage } from './fake-integrations';
+import type { PdfRenderer } from '../../src/service/pdf/pdf-renderer';
+import type { FakeMailTransport, InMemoryFileStorage } from './fake-integrations';
 import { FakeAnthropic } from './fake-anthropic';
 import { createTestApp, truncateAll } from './test-app';
 import { testConfig } from './test-config';
@@ -15,7 +16,7 @@ export interface ResearchAppOptions {
   anthropic?: FakeAnthropic | null;
   sources?: Pick<AcademicSourceService, 'search'>;
   env?: Record<string, string>;
-  pdf?: FakePdfRenderer;
+  pdf?: PdfRenderer;
   storage?: InMemoryFileStorage;
   mail?: FakeMailTransport;
   /** Keep existing rows (simulates a process restart). */

@@ -1,5 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { ContentCoverage, PublicationStatus } from '../../../common/enum/research.enum';
+import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
+import { AppConfig } from '../../../config/app.config';
 import { fingerprint, sha256Hex } from '../../../common/text/fingerprint';
 import { safeHttpUrl } from '../../../common/text/escape-html';
 import { findTopic } from '../../../common/topic/topic-catalog';
@@ -21,6 +23,17 @@ import { FeedbackRepositoryService } from '../repository/feedback-repository.ser
 import { IssueRepositoryService } from '../repository/issue-repository.service';
 import { PublicationError } from './publication-error';
 
+/** Minimum render ownership lease (see IssueService.renderLeaseSeconds). */
+export const RENDER_LEASE_SECONDS = 300;
+
+interface StagedPdf {
+  key: string;
+  sha256: string;
+  sizeBytes: number;
+  /** Already recorded on the issue by an earlier (interrupted) attempt. */
+  staged: boolean;
+}
+
 export const PUBLICATION_NAME = 'PaperMorning';
 
 export interface ComposedArticle {
@@ -37,6 +50,7 @@ export interface ComposedArticle {
 @Injectable()
 export class IssueService {
   constructor(
+    private readonly config: AppConfig,
     private readonly issues: IssueRepositoryService,
     private readonly feedback: FeedbackRepositoryService,
     @Inject(PDF_RENDERER) private readonly pdfRenderer: PdfRenderer,
@@ -120,12 +134,19 @@ export class IssueService {
     return content;
   }
 
-  async publish(params: {
-    userId: string;
-    issueDate: string;
-    timezone: string;
-    content: IssueContentModel;
-  }): Promise<IssueModel> {
+  /**
+   * Freezes the snapshot (first writer wins) and publishes its PDF exactly once:
+   * - one renderer at a time per issue (render claim with fencing token);
+   * - content-addressed storage keys (`issues/<user>/<issue>-<sha256>.pdf`), so no writer can ever
+   *   replace the bytes behind a recorded checksum, even a stale one;
+   * - a verified, stored PDF is staged on the FROZEN issue before READY, so a retry after a crash
+   *   reuses it instead of rendering again;
+   * - READY only after durable write + read-back verification, by the current render owner.
+   */
+  async publish(
+    params: { userId: string; issueDate: string; timezone: string; content: IssueContentModel },
+    options: { waitMs?: number; pollMs?: number } = {},
+  ): Promise<IssueModel> {
     const { issue } = await this.issues.freeze({
       userId: params.userId,
       issueDate: params.issueDate,
@@ -136,7 +157,48 @@ export class IssueService {
     });
     if (issue.status === IssueStatus.READY) return issue;
 
-    // Always render the FROZEN snapshot (the one the web API serves), never a fresh candidate.
+    const renderToken = await this.issues.claimRender(issue.id, this.renderLeaseSeconds());
+    if (!renderToken) return this.awaitOtherRenderer(issue.id, options);
+    try {
+      const pdf = (await this.reuseStagedPdf(issue)) ?? (await this.renderAndStore(issue));
+      if (!pdf.staged) await this.issues.stagePdf(issue.id, renderToken, pdf);
+      return await this.issues.markReady(issue.id, renderToken);
+    } catch (error) {
+      // A newer render owner took over (our lease expired): its result is authoritative.
+      if (error instanceof ClaimLostError) return this.awaitOtherRenderer(issue.id, options);
+      await this.issues.releaseRender(issue.id, renderToken);
+      throw error;
+    }
+  }
+
+  /**
+   * Render ownership must outlive one bounded render (browser launch and page rendering each
+   * capped by PDF_TIMEOUT_MS) plus storage verification.
+   */
+  renderLeaseSeconds(): number {
+    return Math.max(RENDER_LEASE_SECONDS, Math.ceil((2 * this.config.pdf.timeoutMs) / 1000) + 60);
+  }
+
+  /** A stored, still-intact PDF from an interrupted earlier attempt. */
+  private async reuseStagedPdf(issue: IssueModel): Promise<StagedPdf | null> {
+    if (!issue.pdfStorageKey || !issue.pdfSha256 || issue.pdfSizeBytes === null) return null;
+    try {
+      const bytes = await this.storage.read(issue.pdfStorageKey);
+      if (sha256Hex(bytes) !== issue.pdfSha256 || bytes.length !== issue.pdfSizeBytes) return null;
+      assertPdf(bytes);
+      return {
+        key: issue.pdfStorageKey,
+        sha256: issue.pdfSha256,
+        sizeBytes: bytes.length,
+        staged: true,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Always renders the FROZEN snapshot (the one the web API serves), never a fresh candidate. */
+  private async renderAndStore(issue: IssueModel): Promise<StagedPdf> {
     let pdf: Buffer;
     try {
       pdf = await this.pdfRenderer.render(issue.content);
@@ -145,20 +207,38 @@ export class IssueService {
     }
     assertPdf(pdf);
 
-    const key = `issues/${issue.userId}/${issue.id}.pdf`;
+    const sha256 = sha256Hex(pdf);
+    const key = `issues/${issue.userId}/${issue.id}-${sha256}.pdf`;
     try {
       const stored = await this.storage.write(key, pdf);
-      const sha256 = sha256Hex(pdf);
       if (stored.sha256 !== sha256 || stored.sizeBytes !== pdf.length) {
         throw new Error('stored PDF does not match rendered bytes');
       }
       const readBack = await this.storage.read(key);
       if (sha256Hex(readBack) !== sha256)
         throw new Error('stored PDF failed read-back verification');
-      return await this.issues.markReady(issue.id, { key, sha256, sizeBytes: pdf.length });
+      return { key, sha256, sizeBytes: pdf.length, staged: false };
     } catch (error) {
       throw new PublicationError('PDF_STORAGE_FAILED', (error as Error).message, true);
     }
+  }
+
+  /** Another worker is rendering this issue: wait briefly for its READY result. */
+  private async awaitOtherRenderer(
+    issueId: string,
+    { waitMs = 30_000, pollMs = 500 }: { waitMs?: number; pollMs?: number },
+  ): Promise<IssueModel> {
+    const deadline = Date.now() + waitMs;
+    for (let first = true; first || Date.now() < deadline; first = false) {
+      if (!first) await new Promise((resolve) => setTimeout(resolve, pollMs));
+      const current = await this.issues.findById(issueId);
+      if (current?.status === IssueStatus.READY) return current;
+    }
+    throw new PublicationError(
+      'PDF_RENDER_IN_PROGRESS',
+      'The PDF of this issue is being rendered by another worker',
+      true,
+    );
   }
 
   nextIssueNumber(userId: string): Promise<number> {

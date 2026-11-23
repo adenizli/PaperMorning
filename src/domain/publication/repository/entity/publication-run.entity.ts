@@ -42,6 +42,10 @@ export class PublicationRunEntity {
   @Column({ type: 'timestamptz', nullable: true })
   leaseExpiresAt!: Date | null;
 
+  /** Fencing token of the current claim; checkpoints and terminal updates must present it. */
+  @Column({ type: 'uuid', nullable: true })
+  claimToken!: string | null;
+
   @Column({ type: 'varchar', length: 48, nullable: true })
   errorKind!: string | null;
 

@@ -65,6 +65,10 @@ export class PaperAnalysisEntity {
   @Column({ type: 'timestamptz', nullable: true })
   leaseExpiresAt!: Date | null;
 
+  /** Fencing token of the current claim; completion and failure must present it. */
+  @Column({ type: 'uuid', nullable: true })
+  claimToken!: string | null;
+
   @Column({ type: 'varchar', length: 32, nullable: true })
   errorKind!: string | null;
 
