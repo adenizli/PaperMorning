@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
-import { PDF_RENDERER, UnavailablePdfRenderer } from './pdf-renderer';
+import { PDF_RENDERER } from './pdf-renderer';
+import { PdfService } from './pdf.service';
 
 @Module({
-  providers: [{ provide: PDF_RENDERER, useClass: UnavailablePdfRenderer }],
+  providers: [PdfService, { provide: PDF_RENDERER, useExisting: PdfService }],
   exports: [PDF_RENDERER],
 })
 export class PdfModule {}

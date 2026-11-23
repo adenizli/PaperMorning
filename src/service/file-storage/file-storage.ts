@@ -25,16 +25,3 @@ export class FileStorageError extends Error {
     this.name = 'FileStorageError';
   }
 }
-
-/** Default until real storage is wired: fails explicitly. */
-export class UnavailableFileStorage implements FileStorage {
-  write(): Promise<StoredFileInfo> {
-    return Promise.reject(new FileStorageError('No file storage is configured', 'NOT_CONFIGURED'));
-  }
-  read(): Promise<Buffer> {
-    return Promise.reject(new FileStorageError('No file storage is configured', 'NOT_CONFIGURED'));
-  }
-  exists(): Promise<boolean> {
-    return Promise.resolve(false);
-  }
-}

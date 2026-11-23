@@ -17,5 +17,29 @@ services:
       timeout: 3s
       retries: 10
 
+  server:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Inside the compose network the database host is "postgres".
+      DATABASE_URL: postgres://${POSTGRES_USER:-papermorning}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-papermorning}
+      DATA_DIR: /data
+      PORT: '3000'
+      # See README: inside an unprivileged container Chromium's own sandbox cannot start;
+      # the container (non-root, no extra capabilities, JS off, all network blocked) is the boundary.
+      PDF_CHROMIUM_SANDBOX: ${PDF_CHROMIUM_SANDBOX:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:${SERVER_PORT:-3000}:3000'
+    volumes:
+      - papermorning-data:/data
+
 volumes:
   postgres-data:
+  # Private PDF archive. Back it up together with the database.
+  papermorning-data:

@@ -46,6 +46,7 @@ Gereksinimler: Node.js 22+, Docker (PostgreSQL için) veya erişilebilir bir Pos
 cp .env.example .env              # yer tutucu parolaları değiştirin
 docker compose up -d postgres     # kalıcı volume ile PostgreSQL
 npm ci
+npx playwright install chromium   # PDF için headless Chromium (~100 MB, bir kez; Linux'ta: --with-deps)
 npm run build
 npm run migration:run             # şema yalnızca açık migration'larla oluşur (synchronize: false)
 npm start                         # http://localhost:3000/api/health
@@ -60,6 +61,19 @@ npm start                         # http://localhost:3000/api/health
 | `npm run test:unit` | Yalnızca veritabanı gerektirmeyen unit testler |
 | `npm run migration:run` / `migration:revert` / `migration:show` | Derlenmiş `dist/` üzerinden migration yönetimi |
 | `npm run migration:generate -- src/service/persistence/migrations/<Ad>` | Entity değişikliğinden migration taslağı üretir (gözden geçirilerek commit edilir) |
+
+### Docker ile tek komutla (sunucu + PostgreSQL)
+
+```bash
+cp .env.example .env              # POSTGRES_PASSWORD, JWT_SECRET vb. doldurun
+docker compose up -d --build      # migration'lar açılışta açıkça çalıştırılır, ardından sunucu başlar
+curl http://127.0.0.1:3000/api/health
+```
+
+- İmaj: Node 22 + Playwright'ın kurduğu Chromium headless shell ve sistem kütüphaneleri + Türkçe karakter kapsamı için `fonts-dejavu-core` ve `fonts-noto-core` (Debian paketleri; repoda font dosyası yok). Boyut yaklaşık 1,5 GB; tarayıcı indirmesi bunun önemli bir kısmıdır.
+- PDF'ler `papermorning-data` volume'ünde (`/data/private`) saklanır; web kökünden **asla** sunulmaz, yalnızca sahiplik kontrollü `GET /api/issues/:id/pdf` ile indirilir. Veritabanı ve bu volume birlikte yedeklenmelidir.
+- **Chromium sandbox:** Normal bir makinede `PDF_CHROMIUM_SANDBOX=true` (varsayılan). Ayrıcalıksız bir Docker konteynerinde (root olmayan kullanıcı, varsayılan seccomp) Chromium'un kendi sandbox'ı başlatılamıyor (doğrulandı: `Chromium sandboxing failed!`). Bu yüzden compose dosyası `false` kullanır. Telafi edici önlemler: konteyner root olmayan kullanıcıyla ve ek yetki olmadan çalışır; belgede JavaScript kapalıdır; tüm ağ ve `file://` istekleri engellenir; içerik tamamen kaçışlanmış (escape) sunucu verisidir. Sandbox'ı konteynerde açmak isteyen operatör, Chromium'a uygun bir seccomp profili sağlamalıdır.
+- Makine uyku/kapalıysa zamanlanmış işler çalışamaz; sürekli açık bir ortam gerekir.
 
 ### Hesap ve oturum
 
@@ -88,7 +102,7 @@ npm run cli -- delivery:resolve --delivery <id> --as SENT|RETRY                 
 - Okur/yerel tarih başına **tek** sayı (`issue` tablosunda benzersiz). Hazırlık aşamaları (`SELECTING → WRITING → OUTLOOK → RENDERING → READY`) `publication_run` içinde kaydedilir; yeniden başlatmada tamamlanan pahalı adımlar tekrarlanmaz.
 - Yayımlanan sayının içeriği **değiştirilemez**: veritabanı tetikleyicisi dondurulmuş içeriği ve READY olduktan sonra PDF referansını korur. Web API ve PDF aynı anlık görüntüden üretilir; Ufuk Raporu her zaman son bölümdür.
 - E-posta yalnızca **açıkça abone olan** okura, sayı READY ve PDF doğrulanmışsa gider; PDF **her zaman ektir**. SMTP sonucu belirsizse durum `UNKNOWN` olur ve otomatik yeniden gönderilmez.
-- PDF oluşturucu ve SMTP adaptörü ayrı görevlerdir (P0-04, P0-05). Bunlar bağlanana kadar PDF oluşturma açıkça başarısız olur ve teslimat `DISABLED` görünür; hiçbir adım başarılı gibi gösterilmez.
+- PDF, dondurulmuş anlık görüntüden sunucuda headless Chromium ile üretilir (LLM yok, ağ erişimi yok) ve atomik olarak özel depoya yazılır; sayı ancak PDF doğrulandıktan sonra READY olur. SMTP adaptörü ayrı bir görevdir (P0-05); bağlanana kadar teslimat `DISABLED` görünür.
 
 Desteklenen konu anahtarları `src/common/topic/topic-catalog.ts` içindedir. `ANTHROPIC_API_KEY` yoksa keşif ve kural tabanlı eleme yine çalışır; analiz `NOT_CONFIGURED` olarak görünür biçimde başarısız olur ve sonraki çalıştırmada kaldığı yerden devam eder.
 

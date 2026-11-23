@@ -19,10 +19,3 @@ export class PdfRenderError extends Error {
     this.name = 'PdfRenderError';
   }
 }
-
-/** Default until a real renderer is wired: fails explicitly, never produces a fake PDF. */
-export class UnavailablePdfRenderer implements PdfRenderer {
-  render(): Promise<Buffer> {
-    return Promise.reject(new PdfRenderError('No PDF renderer is configured'));
-  }
-}
