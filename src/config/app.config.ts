@@ -22,7 +22,27 @@ export class AppConfig {
     readonly publication: PublicationConfig,
     readonly pdf: PdfConfig,
     readonly storage: StorageConfig,
+    readonly mail: MailConfig,
   ) {}
+}
+
+export type SmtpSecurity = 'tls' | 'starttls' | 'none';
+
+export interface MailConfig {
+  /** False when SMTP is not configured or explicitly disabled: delivery shows DISABLED. */
+  enabled: boolean;
+  host?: string;
+  port: number;
+  /** tls = implicit TLS (465), starttls = upgrade required (587), none = plaintext (dev only). */
+  security: SmtpSecurity;
+  user?: string;
+  password?: string;
+  from?: string;
+  replyTo?: string;
+  /** Development only: allow plaintext or unverified TLS certificates. Refused in production. */
+  allowInsecure: boolean;
+  connectionTimeoutMs: number;
+  socketTimeoutMs: number;
 }
 
 export interface PdfConfig {
@@ -245,6 +265,7 @@ export function loadAppConfig(env: Env = process.env): AppConfig {
       executablePath: read.optionalString('PDF_CHROMIUM_EXECUTABLE'),
     },
     { dataDir: read.string('DATA_DIR', './data') },
+    readMailConfig(read, nodeEnv),
   );
   if (config.publication.publicBaseUrl && !/^https?:\/\//.test(config.publication.publicBaseUrl)) {
     read.problems.push('PUBLIC_BASE_URL must start with http:// or https://');
@@ -331,4 +352,43 @@ export function loadDatabaseConfig(env: Env = process.env): DatabaseConfig {
   const database = readDatabaseConfig(read);
   if (read.problems.length > 0) throw new ConfigValidationError(read.problems);
   return database;
+}
+
+function readMailConfig(read: EnvReader, nodeEnv: NodeEnv): MailConfig {
+  const host = read.optionalString('SMTP_HOST');
+  const security = read.oneOf<SmtpSecurity>('SMTP_SECURE', ['tls', 'starttls', 'none'], 'starttls');
+  const port = read.int('SMTP_PORT', security === 'tls' ? 465 : 587, 1, 65535);
+  const mail: MailConfig = {
+    enabled: Boolean(host) && read.bool('MAIL_ENABLED', true),
+    host,
+    port,
+    security,
+    user: read.optionalString('SMTP_USER'),
+    password: read.optionalString('SMTP_PASSWORD'),
+    from: read.optionalString('SMTP_FROM'),
+    replyTo: read.optionalString('SMTP_REPLY_TO'),
+    allowInsecure: read.bool('SMTP_ALLOW_INSECURE', false),
+    connectionTimeoutMs: read.int('SMTP_CONNECTION_TIMEOUT_MS', 15_000, 100, 120_000),
+    socketTimeoutMs: read.int('SMTP_SOCKET_TIMEOUT_MS', 60_000, 100, 600_000),
+  };
+  if (!host) return mail;
+  if (!mail.from) read.problems.push('SMTP_FROM is required when SMTP_HOST is set');
+  if (Boolean(mail.user) !== Boolean(mail.password)) {
+    read.problems.push('SMTP_USER and SMTP_PASSWORD must be set together');
+  }
+  if (security === 'tls' && (port === 587 || port === 25)) {
+    read.problems.push(`SMTP_SECURE=tls (implicit TLS) does not match port ${port}; use starttls`);
+  }
+  if (security !== 'tls' && port === 465) {
+    read.problems.push('Port 465 uses implicit TLS; set SMTP_SECURE=tls');
+  }
+  if (nodeEnv === 'production' && mail.allowInsecure) {
+    read.problems.push('SMTP_ALLOW_INSECURE is not allowed in production');
+  }
+  if (security === 'none' && !mail.allowInsecure) {
+    read.problems.push(
+      'SMTP_SECURE=none (plaintext) requires SMTP_ALLOW_INSECURE=true (development only)',
+    );
+  }
+  return mail;
 }

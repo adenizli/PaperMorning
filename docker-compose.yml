@@ -39,6 +39,17 @@ services:
     volumes:
       - papermorning-data:/data
 
+  # Optional local mail sink for demos/tests only (not started by default):
+  #   docker compose --profile mail-sink up -d mailpit   -> UI on http://127.0.0.1:8025
+  #   then set SMTP_HOST=mailpit (inside compose) or 127.0.0.1 with SMTP_PORT=1025, SMTP_SECURE=none,
+  #   SMTP_ALLOW_INSECURE=true. Production uses the operator's real SMTP provider.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    profiles: ['mail-sink']
+    ports:
+      - '127.0.0.1:1025:1025'
+      - '127.0.0.1:8025:8025'
+
 volumes:
   postgres-data:
   # Private PDF archive. Back it up together with the database.

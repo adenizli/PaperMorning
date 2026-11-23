@@ -41,6 +41,38 @@ describe('loadAppConfig', () => {
     ).toBe('claude-opus-5-5');
   });
 
+  it('validates SMTP settings without requiring SMTP to start', () => {
+    expect(loadAppConfig(base).mail).toMatchObject({
+      enabled: false,
+      security: 'starttls',
+      port: 587,
+    });
+    const smtp = { ...base, SMTP_HOST: 'smtp.example.org', SMTP_FROM: 'pm@example.org' };
+    expect(loadAppConfig(smtp).mail).toMatchObject({
+      enabled: true,
+      port: 587,
+      security: 'starttls',
+    });
+    expect(loadAppConfig({ ...smtp, SMTP_SECURE: 'tls' }).mail.port).toBe(465);
+    expect(loadAppConfig({ ...smtp, MAIL_ENABLED: 'false' }).mail.enabled).toBe(false);
+    expect(() => loadAppConfig({ ...base, SMTP_HOST: 'smtp.example.org' })).toThrow(
+      /SMTP_FROM is required/,
+    );
+    expect(() => loadAppConfig({ ...smtp, SMTP_USER: 'u' })).toThrow(/must be set together/);
+    expect(() => loadAppConfig({ ...smtp, SMTP_SECURE: 'tls', SMTP_PORT: '587' })).toThrow(
+      /does not match port 587/,
+    );
+    expect(() => loadAppConfig({ ...smtp, SMTP_PORT: '465' })).toThrow(
+      /Port 465 uses implicit TLS/,
+    );
+    expect(() => loadAppConfig({ ...smtp, SMTP_SECURE: 'none' })).toThrow(
+      /requires SMTP_ALLOW_INSECURE/,
+    );
+    expect(() =>
+      loadAppConfig({ ...smtp, NODE_ENV: 'production', SMTP_ALLOW_INSECURE: 'true' }),
+    ).toThrow(/not allowed in production/);
+  });
+
   it('defaults to secure cookies, open registration and no user cap', () => {
     expect(loadAppConfig(base).auth).toMatchObject({
       cookieSecure: true,

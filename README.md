@@ -75,6 +75,15 @@ curl http://127.0.0.1:3000/api/health
 - **Chromium sandbox:** Normal bir makinede `PDF_CHROMIUM_SANDBOX=true` (varsayılan). Ayrıcalıksız bir Docker konteynerinde (root olmayan kullanıcı, varsayılan seccomp) Chromium'un kendi sandbox'ı başlatılamıyor (doğrulandı: `Chromium sandboxing failed!`). Bu yüzden compose dosyası `false` kullanır. Telafi edici önlemler: konteyner root olmayan kullanıcıyla ve ek yetki olmadan çalışır; belgede JavaScript kapalıdır; tüm ağ ve `file://` istekleri engellenir; içerik tamamen kaçışlanmış (escape) sunucu verisidir. Sandbox'ı konteynerde açmak isteyen operatör, Chromium'a uygun bir seccomp profili sağlamalıdır.
 - Makine uyku/kapalıysa zamanlanmış işler çalışamaz; sürekli açık bir ortam gerekir.
 
+### E-posta (SMTP)
+
+- Kurulum sahibi kendi SMTP sağlayıcısını `SMTP_*` değişkenleriyle tanımlar. `SMTP_HOST` boşsa uygulama yine çalışır, sayılar ve PDF'ler üretilir; teslimatlar `DISABLED` görünür, asla `SENT` değil.
+- Güvenlik: `starttls` (587) TLS yükseltmesini **zorunlu** kılar; `tls` (465) doğrudan TLS'tir. Sertifika doğrulaması açıktır. Düz metin veya doğrulanmamış sertifika yalnızca geliştirmede `SMTP_ALLOW_INSECURE=true` ile mümkündür; production'da açılış hatası verir. Port/güvenlik uyumsuzlukları (465 + starttls gibi) açılışta reddedilir.
+- Her e-posta okunabilir metin + HTML özet, kaynak bağlantıları, Ufuk Raporu ön izlemesi, (tanımlıysa) `PUBLIC_BASE_URL` web bağlantısı ve **kişisel PDF'in kendisini ek olarak** içerir. Yalnızca bağlantı gönderimi yapılmaz. `PUBLIC_BASE_URL` yalnızca ev ağında erişilebilen bir adresse dışarıdaki okur bağlantıyı açamaz; PDF eki bu yüzden zorunludur.
+- Sonuç sınıflandırması: SMTP'nin kabul etmesi `SENT`'tir ve **gelen kutusuna ulaştığının kanıtı değildir**. Kesin ret `FAILED` olur (4xx geçici, 5xx kalıcı; kimlik doğrulama ve TLS hataları yapılandırma düzeltilince yeniden denenebilir). Sunucu `354` (DATA başlat) yanıtını verdikten sonra bağlantı koparsa mesaj alınmış olabilir: durum `UNKNOWN` olur ve **otomatik yeniden gönderilmez**. Operatör sağlayıcıyı kontrol edip `delivery:resolve --as SENT|RETRY` ile karar verir.
+- Abonelikten çıkma: okur Ayarlar → Günlük e-posta seçeneğini kapatır (`PUT /api/preferences`, `dailyEmailEnabled=false`). Güvensiz tek tıklık bağlantı yoktur.
+- Demo için yerel posta kutusu: `docker compose --profile mail-sink up -d mailpit` (arayüz: http://127.0.0.1:8025).
+
 ### Hesap ve oturum
 
 - Kayıt yalnızca `username`, `email`, `password` alır (`POST /api/auth/register`); fazladan alan 400 ile reddedilir. **E-posta doğrulaması yoktur.**
@@ -102,7 +111,7 @@ npm run cli -- delivery:resolve --delivery <id> --as SENT|RETRY                 
 - Okur/yerel tarih başına **tek** sayı (`issue` tablosunda benzersiz). Hazırlık aşamaları (`SELECTING → WRITING → OUTLOOK → RENDERING → READY`) `publication_run` içinde kaydedilir; yeniden başlatmada tamamlanan pahalı adımlar tekrarlanmaz.
 - Yayımlanan sayının içeriği **değiştirilemez**: veritabanı tetikleyicisi dondurulmuş içeriği ve READY olduktan sonra PDF referansını korur. Web API ve PDF aynı anlık görüntüden üretilir; Ufuk Raporu her zaman son bölümdür.
 - E-posta yalnızca **açıkça abone olan** okura, sayı READY ve PDF doğrulanmışsa gider; PDF **her zaman ektir**. SMTP sonucu belirsizse durum `UNKNOWN` olur ve otomatik yeniden gönderilmez.
-- PDF, dondurulmuş anlık görüntüden sunucuda headless Chromium ile üretilir (LLM yok, ağ erişimi yok) ve atomik olarak özel depoya yazılır; sayı ancak PDF doğrulandıktan sonra READY olur. SMTP adaptörü ayrı bir görevdir (P0-05); bağlanana kadar teslimat `DISABLED` görünür.
+- PDF, dondurulmuş anlık görüntüden sunucuda headless Chromium ile üretilir (LLM yok, ağ erişimi yok) ve atomik olarak özel depoya yazılır; sayı ancak PDF doğrulandıktan sonra READY olur. E-posta, operatörün SMTP sağlayıcısı üzerinden PDF ekiyle gönderilir (aşağıya bakın).
 
 Desteklenen konu anahtarları `src/common/topic/topic-catalog.ts` içindedir. `ANTHROPIC_API_KEY` yoksa keşif ve kural tabanlı eleme yine çalışır; analiz `NOT_CONFIGURED` olarak görünür biçimde başarısız olur ve sonraki çalıştırmada kaldığı yerden devam eder.
 

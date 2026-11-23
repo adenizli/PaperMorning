@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
-import { DisabledMailTransport, MAIL_TRANSPORT } from './mail-transport';
+import { MAIL_TRANSPORT } from './mail-transport';
+import { MailService } from './mail.service';
 
 @Module({
-  providers: [{ provide: MAIL_TRANSPORT, useClass: DisabledMailTransport }],
+  providers: [MailService, { provide: MAIL_TRANSPORT, useExisting: MailService }],
   exports: [MAIL_TRANSPORT],
 })
 export class MailModule {}

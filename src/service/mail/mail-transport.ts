@@ -28,17 +28,3 @@ export interface MailTransport {
   isEnabled(): boolean;
   send(message: MailMessage): Promise<MailSendResult>;
 }
-
-/** Default until SMTP is configured: sending is explicitly disabled. */
-export class DisabledMailTransport implements MailTransport {
-  isEnabled(): boolean {
-    return false;
-  }
-  send(): Promise<MailSendResult> {
-    return Promise.resolve({
-      status: 'REJECTED',
-      permanent: false,
-      reason: 'Mail transport disabled',
-    });
-  }
-}
