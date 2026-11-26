@@ -29,12 +29,12 @@ docker compose exec -T server node dist/bootstrap/cli.js publication:status --us
 
 ## 2. Güncelleme (Geveze)
 
-Önce mevcut durumu kaydedin (doğrulamada karşılaştırılacak):
+Önce yayımlanmış sayıların durumunu kaydedin (salt okunur sorgu; eski sürümde `publication:status` henüz yoktur):
 
 ```bash
 cd <papermorning-dizini>
-docker compose exec -T server node dist/bootstrap/cli.js publication:status --user <okur> --date 2026-11-26 > before-2026-11-26.json
-jq '{state, issue}' before-2026-11-26.json
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "SELECT id, issue_date, status, content_hash, pdf_storage_key, pdf_sha256, pdf_size_bytes, published_at FROM issue ORDER BY issue_date, id"' > issues-before.txt
+cat issues-before.txt
 ```
 
 Yedek (veritabanı + PDF arşivi birlikte):
@@ -75,11 +75,13 @@ Geri dönüş: önceki commit'e `git checkout <önceki-sha>` ve `docker compose 
    docker compose exec -T server node dist/bootstrap/cli.js pdf:smoke; echo "exit=$?"
    ```
 
-3. **Yayımlanmış sayı değişmedi**
+3. **Yayımlanmış sayılar değişmedi**
 
    ```bash
-   docker compose exec -T server node dist/bootstrap/cli.js publication:status --user <okur> --date 2026-11-26 > after-2026-11-26.json
-   diff <(jq '.issue' before-2026-11-26.json) <(jq '.issue' after-2026-11-26.json) && echo "issue unchanged"
+   docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "SELECT id, issue_date, status, content_hash, pdf_storage_key, pdf_sha256, pdf_size_bytes, published_at FROM issue ORDER BY issue_date, id"' > issues-after.txt
+   diff issues-before.txt issues-after.txt && echo "published issues unchanged"
+   docker compose exec -T server node dist/bootstrap/cli.js publication:status --user <okur> --date 2026-11-26 > status-2026-11-26.json
+   jq '{state, issue, next}' status-2026-11-26.json
    ```
 
 4. **Ücretsiz önizleme** (bölüm 4) → PDF'i indirip sayfa sayısını ve görünümü kontrol edin. `llm:usage` değişmemeli.
@@ -95,7 +97,7 @@ Geri dönüş: önceki commit'e `git checkout <önceki-sha>` ve `docker compose 
 Mevcut bir sayının **dondurulmuş içeriğini** yeni şablonla geçici bir QA PDF'ine dizer. Claude çağrısı, veritabanı yazması ve depolama yazması yapmaz; yayımlanmış PDF'in checksum'ını yeniden doğrular. PDF her sayfada "QA ÖNİZLEMESİ — yayımlanmış sayı değildir" ibaresi taşır.
 
 ```bash
-ISSUE_ID=$(jq -r '.issue.id' after-2026-11-26.json)
+ISSUE_ID=$(jq -r '.issue.id' status-2026-11-26.json)
 docker compose exec -T server node dist/bootstrap/cli.js issue:preview --issue "$ISSUE_ID" --out - > ~/preview-2026-11-26.pdf
 # JSON özet stderr'de: preview.sha256, published.verifiedUnchanged=true, claudeCalls=0
 ```
