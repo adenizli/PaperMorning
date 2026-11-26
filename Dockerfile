@@ -8,7 +8,10 @@ COPY src ./src
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22-bookworm-slim
+# PAPERMORNING_RUNTIME=container makes PDF_CHROMIUM_SANDBOX=auto (the default) resolve to "off"
+# and makes an explicit PDF_CHROMIUM_SANDBOX=true a startup error instead of a render failure.
 ENV NODE_ENV=production \
+    PAPERMORNING_RUNTIME=container \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     DATA_DIR=/data \
     PORT=3000 \

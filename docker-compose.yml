@@ -28,9 +28,12 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-papermorning}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-papermorning}
       DATA_DIR: /data
       PORT: '3000'
-      # See README: inside an unprivileged container Chromium's own sandbox cannot start, so the
-      # container below is the isolation boundary. This is weaker than Chromium's sandbox.
-      PDF_CHROMIUM_SANDBOX: ${PDF_CHROMIUM_SANDBOX:-false}
+      # Fixed value, deliberately NOT interpolated from .env: a host-oriented
+      # PDF_CHROMIUM_SANDBOX=true in .env (env_file above) used to reach the container and break
+      # every render ("Chromium sandboxing failed!"). Inside this unprivileged container Chromium's
+      # own sandbox cannot start; the hardened container below is the isolation boundary, which is
+      # weaker than Chromium's sandbox (see README "Chromium sandbox").
+      PDF_CHROMIUM_SANDBOX: 'false'
     depends_on:
       postgres:
         condition: service_healthy

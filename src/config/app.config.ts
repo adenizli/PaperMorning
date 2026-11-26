@@ -65,11 +65,26 @@ export interface MailConfig {
   socketTimeoutMs: number;
 }
 
+/** Where the process runs. The official image sets PAPERMORNING_RUNTIME=container. */
+export type RuntimeKind = 'host' | 'container';
+
+/**
+ * How the effective sandbox setting was decided: an explicit PDF_CHROMIUM_SANDBOX=true|false, or
+ * `auto` (the default) resolved from the runtime.
+ */
+export type ChromiumSandboxSource = 'explicit' | 'auto';
+
 export interface PdfConfig {
   timeoutMs: number;
   maxConcurrency: number;
-  /** Keep Chromium's sandbox on; only disable where the host cannot provide it (see README). */
+  /**
+   * Effective Chromium sandbox setting. `auto` (default): on for a normal host, off inside the
+   * official container, where an unprivileged, capability-less, no-new-privileges container
+   * cannot start Chromium's sandbox and the hardened container is the isolation boundary.
+   */
   chromiumSandbox: boolean;
+  chromiumSandboxSource: ChromiumSandboxSource;
+  runtime: RuntimeKind;
   maxSnapshotBytes: number;
   /** Optional explicit Chromium binary (otherwise Playwright's installed browser). */
   executablePath?: string;
@@ -227,6 +242,36 @@ export class EnvReader {
   }
 }
 
+/**
+ * PDF_CHROMIUM_SANDBOX=auto|true|false. Inside the official container an explicit `true` is a
+ * configuration error reported at startup (Chromium would fail on the first render with
+ * "Chromium sandboxing failed!"), typically a host-oriented `.env` leaking into the container.
+ */
+export function readChromiumSandbox(
+  read: EnvReader,
+  env: Env,
+): Pick<PdfConfig, 'chromiumSandbox' | 'chromiumSandboxSource' | 'runtime'> {
+  const runtime = read.oneOf<RuntimeKind>('PAPERMORNING_RUNTIME', ['host', 'container'], 'host');
+  const raw = env.PDF_CHROMIUM_SANDBOX?.trim().toLowerCase();
+  if (!raw || raw === 'auto') {
+    return { chromiumSandbox: runtime !== 'container', chromiumSandboxSource: 'auto', runtime };
+  }
+  if (!['true', '1', 'yes', 'false', '0', 'no'].includes(raw)) {
+    read.problems.push('PDF_CHROMIUM_SANDBOX must be auto, true or false');
+    return { chromiumSandbox: runtime !== 'container', chromiumSandboxSource: 'auto', runtime };
+  }
+  const chromiumSandbox = read.bool('PDF_CHROMIUM_SANDBOX', true);
+  if (runtime === 'container' && chromiumSandbox) {
+    read.problems.push(
+      'PDF_CHROMIUM_SANDBOX=true cannot work inside the PaperMorning container (non-root, all ' +
+        'capabilities dropped, no-new-privileges: Chromium cannot start its sandbox). Remove it ' +
+        'or set PDF_CHROMIUM_SANDBOX=auto; docker-compose.yml already fixes it to false. ' +
+        'See README "Chromium sandbox".',
+    );
+  }
+  return { chromiumSandbox, chromiumSandboxSource: 'explicit', runtime };
+}
+
 export function loadAppConfig(env: Env = process.env): AppConfig {
   const read = new EnvReader(env);
   const nodeEnv = read.oneOf<NodeEnv>(
@@ -280,7 +325,7 @@ export function loadAppConfig(env: Env = process.env): AppConfig {
     {
       timeoutMs: read.int('PDF_TIMEOUT_MS', 60_000, 1, 600_000),
       maxConcurrency: read.int('PDF_MAX_CONCURRENCY', 1, 1, 8),
-      chromiumSandbox: read.bool('PDF_CHROMIUM_SANDBOX', true),
+      ...readChromiumSandbox(read, env),
       maxSnapshotBytes: read.int('PDF_MAX_SNAPSHOT_BYTES', 2 * 1024 * 1024, 1024, 50 * 1024 * 1024),
       executablePath: read.optionalString('PDF_CHROMIUM_EXECUTABLE'),
     },

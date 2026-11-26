@@ -24,7 +24,7 @@ export class PdfService implements PdfRenderer, OnModuleInit {
   constructor(private readonly config: AppConfig) {}
 
   onModuleInit(): void {
-    this.logger.log(`PDF template ${ISSUE_TEMPLATE_VERSION}`);
+    this.logger.log(`PDF template ${ISSUE_TEMPLATE_VERSION}; ${describeSandbox(this.config)}`);
   }
 
   async render(content: IssueContentModel, options: RenderIssueOptions = {}): Promise<Buffer> {
@@ -101,7 +101,12 @@ export class PdfService implements PdfRenderer, OnModuleInit {
         await closeBrowser(); // timed out: stop Chromium now if it is already running
         throw error;
       }
-      throw new PdfRenderError(`Chromium PDF rendering failed: ${(error as Error).message}`);
+      const message = (error as Error).message;
+      const hint =
+        this.config.pdf.chromiumSandbox && /sandbox/i.test(message)
+          ? ` (Chromium sandbox is ON [${this.config.pdf.chromiumSandboxSource}, runtime ${this.config.pdf.runtime}]; inside a container use PDF_CHROMIUM_SANDBOX=auto or false — see README "Chromium sandbox")`
+          : '';
+      throw new PdfRenderError(`Chromium PDF rendering failed: ${message}${hint}`);
     } finally {
       clearTimeout(timer);
     }
@@ -119,4 +124,11 @@ export class PdfService implements PdfRenderer, OnModuleInit {
     this.active--;
     this.waiting.shift()?.();
   }
+}
+
+export function describeSandbox(config: AppConfig): string {
+  const { chromiumSandbox, chromiumSandboxSource, runtime } = config.pdf;
+  return chromiumSandbox
+    ? `Chromium sandbox ON (${chromiumSandboxSource}, runtime ${runtime})`
+    : `Chromium sandbox OFF (${chromiumSandboxSource}, runtime ${runtime}): the hardened container/host account is the isolation boundary`;
 }
