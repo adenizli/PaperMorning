@@ -17,6 +17,8 @@ export function buildPostgresOptions(database: DatabaseConfig): PostgresConnecti
     ssl: database.ssl ? { rejectUnauthorized: true } : false,
     logging: database.logging ? ['query', 'error'] : ['error'],
     synchronize: false,
+    // gen_random_uuid() is built into PostgreSQL 13+; no uuid-ossp extension needed.
+    uuidExtension: 'pgcrypto',
     migrationsRun: false,
     migrations: [MIGRATIONS_GLOB],
     migrationsTableName: 'migrations',

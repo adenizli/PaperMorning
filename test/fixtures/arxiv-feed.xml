@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <title>ArXiv Query</title>
+  <entry>
+    <id>http://arxiv.org/abs/2611.01234v2</id>
+    <updated>2026-11-21T12:00:00Z</updated>
+    <published>2026-11-19T09:00:00Z</published>
+    <title>Robust   quantum
+      error correction</title>
+    <summary>  We study quantum error correction on 72 qubits and report a 2.5x reduction.  </summary>
+    <author><name>Ayşe Yılmaz</name></author>
+    <author><name>Jon Doe</name></author>
+    <arxiv:doi>10.1038/s41586-026-01234-5</arxiv:doi>
+    <arxiv:journal_ref>Nature 650 (2026)</arxiv:journal_ref>
+    <link href="http://arxiv.org/abs/2611.01234v2" rel="alternate" type="text/html"/>
+    <link title="pdf" href="http://arxiv.org/pdf/2611.01234v2" rel="related" type="application/pdf"/>
+    <category term="quant-ph" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.ET" scheme="http://arxiv.org/schemas/atom"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2611.09999v1</id>
+    <updated>2026-11-20T12:00:00Z</updated>
+    <published>2026-11-20T12:00:00Z</published>
+    <title>Single entry without DOI</title>
+    <summary>Short.</summary>
+    <author><name>Solo Author</name></author>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+  </entry>
+</feed>

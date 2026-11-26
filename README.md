@@ -61,6 +61,20 @@ npm start                         # http://localhost:3000/api/health
 | `npm run migration:run` / `migration:revert` / `migration:show` | Derlenmiş `dist/` üzerinden migration yönetimi |
 | `npm run migration:generate -- src/service/persistence/migrations/<Ad>` | Entity değişikliğinden migration taslağı üretir (gözden geçirilerek commit edilir) |
 
+### Operatör CLI (yalnızca sunucu ortamında)
+
+Pahalı işler için herkese açık HTTP endpoint'i yoktur; operatör aynı yapılandırmayla CLI kullanır:
+
+```bash
+npm run build
+npm run cli -- research:run --topics robotics,quantum-physics --days 7 --cap 3   # keşif -> eleme -> analiz
+npm run cli -- llm:usage                                                         # bugünkü Haiku/Sonnet çağrıları ve maliyet
+```
+
+Desteklenen konu anahtarları `src/common/topic/topic-catalog.ts` içindedir. `ANTHROPIC_API_KEY` yoksa keşif ve kural tabanlı eleme yine çalışır; analiz `NOT_CONFIGURED` olarak görünür biçimde başarısız olur ve sonraki çalıştırmada kaldığı yerden devam eder.
+
+**Bütçe ve eşzamanlılık:** Her Claude isteğinden önce en kötü durum maliyeti PostgreSQL'de atomik olarak rezerve edilir (`llm_usage`, advisory lock altında kısa bir transaction; devam eden çağrılar da sayılır), böylece eşzamanlı çağrılar birlikte `LLM_DAILY_BUDGET_USD`'yi aşamaz. Yanıt gelince rezervasyon gerçek token kullanımına göre kapatılır; zaman aşımı/kopan bağlantı gibi belirsiz sonuçlarda en kötü durum tutarı sayılmaya devam eder. Analiz ve araştırma çalıştırması kayıtları süreli bir sahiplik (lease) ve her claim'de yenilenen bir fencing token (`claim_token`) taşır: süresi dolup başka bir worker'a geçen kaydı eski worker artık güncelleyemez.
+
 **Testler (dikkat: `npm test` test veritabanının şemasını SİLER):** Veritabanı testleri `TEST_DATABASE_URL` ile gösterilen veritabanında `public` şemasını silip tüm migration'larla yeniden kurar. Bu yüzden kurulum, hiçbir şeye bağlanmadan önce hedefi doğrular ve şüphede durur:
 
 - `TEST_DATABASE_URL` **açıkça** verilmelidir (varsayılan yoktur); yalnızca `postgres://` URL'si, sorgu parametresi yok, veritabanı adı küçük harfli `<ad>_test` biçiminde ve `prod`/`production`/`staging`/`live` gibi sözcükler içermez.
