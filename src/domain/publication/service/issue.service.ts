@@ -80,6 +80,7 @@ export class IssueService {
         whyItMatters: article.whyItMatters,
         sections: article.sections,
         glossary: article.glossary,
+        ...(article.notReported ? { notReported: article.notReported } : {}),
         source: {
           title: view.title,
           authors: view.authors,
@@ -121,7 +122,10 @@ export class IssueService {
       language: params.language,
       generatedAt: params.generatedAt.toISOString(),
       cover: { headline: cover.headline, dek: cover.dek, articleKey: cover.key },
-      intro: `Bu sayıda ${articles.length} araştırma var (${topicLabels.join(', ')}). Kapak dosyası: “${cover.headline}”. Sayı, çalışmaları birlikte değerlendiren Ufuk Raporu ile kapanıyor.`,
+      intro:
+        articles.length === 1
+          ? `Bu sayıda tek bir araştırma var (${topicLabels.join(', ')}): “${cover.headline}”. Sayı, bu çalışmayı eleştirel olarak değerlendiren Ufuk Raporu ile kapanıyor.`
+          : `Bu sayıda ${articles.length} araştırma var (${topicLabels.join(', ')}). Kapak dosyası: “${cover.headline}”. Sayı, çalışmaları birlikte değerlendiren Ufuk Raporu ile kapanıyor.`,
       toc: [
         ...articles.map((a) => ({ key: a.key, title: a.headline, kind: 'ARTICLE' as const })),
         { key: OUTLOOK_CONTENT_KEY, title: params.outlook.title, kind: 'OUTLOOK' as const },
@@ -347,6 +351,7 @@ export function validateIssueContent(content: IssueContentModel): void {
     content.outlook.synthesis,
     ...content.outlook.evidence,
     ...content.outlook.inferences,
+    ...(content.outlook.contrasts ?? []),
     ...content.outlook.academicOpportunities,
     ...content.outlook.industryOpportunities,
   ].flatMap((item) => item.paperKeys);
