@@ -245,6 +245,23 @@ export class IssueService {
     );
   }
 
+  /**
+   * Layout-only QA preview of an existing snapshot (FROZEN or READY) with the current template.
+   * Read-only by construction: no Claude call, no database write, no storage write; the
+   * published PDF, its checksum and the issue state are never touched.
+   */
+  async renderPreview(issueId: string, note: string): Promise<{ issue: IssueModel; pdf: Buffer }> {
+    const issue = await this.issues.findById(issueId);
+    if (!issue) throw new PublicationError('NOT_FOUND', `No issue ${issueId}`, false);
+    const pdf = await this.pdfRenderer.render(issue.content, { preview: { note } });
+    assertPdf(pdf);
+    return { issue, pdf };
+  }
+
+  findById(issueId: string): Promise<IssueModel | null> {
+    return this.issues.findById(issueId);
+  }
+
   nextIssueNumber(userId: string): Promise<number> {
     return this.issues.countForUser(userId).then((count) => count + 1);
   }
