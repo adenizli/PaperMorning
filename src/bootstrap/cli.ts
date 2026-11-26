@@ -3,6 +3,9 @@ import { INestApplicationContext, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import { SUPPORTED_TOPIC_KEYS } from '../common/topic/topic-catalog';
+import { AccountService } from '../domain/account/service/account.service';
+import { DeliveryService } from '../domain/publication/service/delivery.service';
+import { PublicationService } from '../domain/publication/service/publication.service';
 import { ResearchService } from '../domain/research/service/research.service';
 import { LlmService, startOfUtcDay } from '../service/llm/llm.service';
 
@@ -12,6 +15,9 @@ import { LlmService, startOfUtcDay } from '../service/llm/llm.service';
  *
  *   npm run cli -- research:run --topics robotics,quantum-physics [--date 2026-11-24] [--days 7] [--cap 3]
  *   npm run cli -- llm:usage [--date 2026-11-24]
+ *   npm run cli -- publication:prepare --user <username|email> --date 2026-11-24
+ *   npm run cli -- delivery:send --user <username|email> --date 2026-11-24      (real send; opt-in + READY required)
+ *   npm run cli -- delivery:resolve --delivery <id> --as SENT|RETRY             (operator decision for UNKNOWN)
  */
 type Args = Record<string, string | undefined>;
 
@@ -40,7 +46,54 @@ const commands: Record<string, (app: INestApplicationContext, args: Args) => Pro
     const to = new Date(from.getTime() + 24 * 3600 * 1000);
     return app.get(LlmService).summarize(from, to);
   },
+  'publication:prepare': async (app, args) => {
+    const userId = await requireUser(app, args);
+    const { outcome, reason, issue, run } = await app
+      .get(PublicationService)
+      .prepareIssue(userId, requireDate(args));
+    return {
+      outcome,
+      reason,
+      issueId: issue?.id,
+      issueStatus: issue?.status,
+      stage: run?.stage,
+      attempts: run?.attemptCount,
+    };
+  },
+  'delivery:send': async (app, args) => {
+    const userId = await requireUser(app, args);
+    const { outcome, message, delivery } = await app
+      .get(DeliveryService)
+      .sendReadyIssue(userId, requireDate(args));
+    return {
+      outcome,
+      message,
+      status: delivery?.status,
+      attempts: delivery?.attemptCount,
+      providerMessageId: delivery?.providerMessageId,
+    };
+  },
+  'delivery:resolve': async (app, args) => {
+    if (!args.delivery || (args.as !== 'SENT' && args.as !== 'RETRY')) {
+      throw new Error('--delivery <id> and --as SENT|RETRY are required');
+    }
+    const delivery = await app.get(DeliveryService).resolveUnknown(args.delivery, args.as);
+    return { id: delivery.id, status: delivery.status };
+  },
 };
+
+async function requireUser(app: INestApplicationContext, args: Args): Promise<string> {
+  if (!args.user) throw new Error('--user <username|email> is required');
+  const user = await app.get(AccountService).findByIdentifier(args.user);
+  if (!user) throw new Error(`No user ${args.user}`);
+  return user.id;
+}
+
+function requireDate(args: Args): string {
+  if (!args.date || !/^\d{4}-\d{2}-\d{2}$/.test(args.date))
+    throw new Error('--date YYYY-MM-DD is required');
+  return args.date;
+}
 
 export function parseArgs(argv: string[]): { command?: string; args: Args } {
   const [command, ...rest] = argv;

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
 import { AppConfig } from '../../../config/app.config';
+import { shiftDate } from '../../../common/time/calendar-date';
 import { findTopic } from '../../../common/topic/topic-catalog';
 import type { DailyResearchRequest } from '../model/research-request.model';
 import { ResearchRunCounts, ResearchRunModel, ResearchRunStage } from '../model/research-run.model';
@@ -141,10 +142,4 @@ export class ResearchService {
       }
     }
   }
-}
-
-export function shiftDate(isoDate: string, days: number): string {
-  const date = new Date(`${isoDate}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
 }

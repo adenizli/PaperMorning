@@ -19,7 +19,24 @@ export class AppConfig {
     readonly llm: LlmConfig,
     readonly research: ResearchConfig,
     readonly auth: AuthConfig,
+    readonly publication: PublicationConfig,
   ) {}
+}
+
+export interface PublicationConfig {
+  /**
+   * Externally reachable base URL of the web client used in emails (e.g. https://paper.example.org).
+   * Optional: when unset, emails carry no web link (the PDF attachment is always included).
+   */
+  publicBaseUrl?: string;
+  maxArticlesPerIssue: number;
+  /** Preparation attempts per reader/day before the run stays FAILED for operator attention. */
+  maxPreparationAttempts: number;
+  retryBackoffMinutes: number;
+  leaseSeconds: number;
+  /** Raw PDF size limit; base64 MIME encoding adds ~37% on the wire. */
+  maxAttachmentBytes: number;
+  maxDeliveryAttempts: number;
 }
 
 export interface AuthConfig {
@@ -189,7 +206,24 @@ export function loadAppConfig(env: Env = process.env): AppConfig {
       rateLimitPerMinute: read.int('AUTH_RATE_LIMIT_PER_MINUTE', 10, 1, 1000),
       trustProxy: read.bool('TRUST_PROXY', false),
     },
+    {
+      publicBaseUrl: read.optionalString('PUBLIC_BASE_URL')?.replace(/\/+$/, ''),
+      maxArticlesPerIssue: read.int('PUBLICATION_MAX_ARTICLES', 6, 1, 12),
+      maxPreparationAttempts: read.int('PUBLICATION_MAX_ATTEMPTS', 5, 1, 20),
+      retryBackoffMinutes: read.int('PUBLICATION_RETRY_BACKOFF_MINUTES', 10, 1, 240),
+      leaseSeconds: read.int('PUBLICATION_LEASE_SECONDS', 900, 30, 7200),
+      maxAttachmentBytes: read.int(
+        'MAIL_MAX_ATTACHMENT_BYTES',
+        10 * 1024 * 1024,
+        1024,
+        50 * 1024 * 1024,
+      ),
+      maxDeliveryAttempts: read.int('MAIL_MAX_ATTEMPTS', 3, 1, 10),
+    },
   );
+  if (config.publication.publicBaseUrl && !/^https?:\/\//.test(config.publication.publicBaseUrl)) {
+    read.problems.push('PUBLIC_BASE_URL must start with http:// or https://');
+  }
   if (config.auth.jwtSecret && config.auth.jwtSecret.length < 32) {
     read.problems.push('JWT_SECRET must be at least 32 characters');
   }

@@ -78,7 +78,19 @@ Pahalı işler için herkese açık HTTP endpoint'i yoktur; operatör aynı yap�
 npm run build
 npm run cli -- research:run --topics robotics,quantum-physics --days 7 --cap 3   # keşif -> eleme -> analiz
 npm run cli -- llm:usage                                                         # bugünkü Haiku/Sonnet çağrıları ve maliyet
+npm run cli -- publication:prepare --user <kullanıcı> --date 2026-11-24         # kişisel sayıyı hazırla (idempotent)
+npm run cli -- delivery:send --user <kullanıcı> --date 2026-11-24               # GERÇEK gönderim: opt-in + READY + PDF eki şart
+npm run cli -- delivery:resolve --delivery <id> --as SENT|RETRY                  # UNKNOWN teslimat için operatör kararı
 ```
+
+### Yayın ve teslimat davranışı
+
+- Okur/yerel tarih başına **tek** sayı (`issue` tablosunda benzersiz). Hazırlık aşamaları (`SELECTING → WRITING → OUTLOOK → RENDERING → READY`) `publication_run` içinde kaydedilir; yeniden başlatmada tamamlanan pahalı adımlar tekrarlanmaz.
+- Yayımlanan sayının içeriği **değiştirilemez**: veritabanı tetikleyicisi dondurulmuş içeriği ve READY olduktan sonra PDF referansını korur. Web API ve PDF aynı anlık görüntüden üretilir; Ufuk Raporu her zaman son bölümdür.
+- **Eşzamanlılık:** Sayı hazırlama çalıştırması, yazı varyantları ve Ufuk Raporu üretimi süreli claim + fencing token ile korunur; süresi dolup devralınan bir işi eski worker artık yazamaz. Bir sayının PDF'ini aynı anda tek bir worker oluşturur (render claim); PDF anahtarı içerik adreslidir (`issues/<kullanıcı>/<sayı>-<sha256>.pdf`), bu yüzden READY sayının dosyası hiçbir yazıcı tarafından değiştirilemez. Saklanıp doğrulanmış ama READY'ye geçememiş bir PDF yeniden denemede tekrar render edilmeden kullanılır.
+- **Ufuk Raporu paylaşımı:** Aynı araştırma paketi, dil, bilgi düzeyi, model ve prompt sürümü için rapor bir kez üretilir (`outlook_generation` teknik claim/önbellek tablosu). Rapor, onu üreten sayı sonradan başarısız olsa bile kalıcıdır ve diğer okurlar tarafından yeniden kullanılır; rapor modeli yine sayı içeriğinin parçasıdır.
+- E-posta yalnızca **açıkça abone olan** okura, sayı READY ve PDF doğrulanmışsa gider; PDF **her zaman ektir**. SMTP sonucu belirsizse durum `UNKNOWN` olur ve otomatik yeniden gönderilmez.
+- PDF oluşturucu ve SMTP adaptörü ayrı görevlerdir (P0-04, P0-05). Bunlar bağlanana kadar PDF oluşturma açıkça başarısız olur ve teslimat `DISABLED` görünür; hiçbir adım başarılı gibi gösterilmez.
 
 Desteklenen konu anahtarları `src/common/topic/topic-catalog.ts` içindedir. `ANTHROPIC_API_KEY` yoksa keşif ve kural tabanlı eleme yine çalışır; analiz `NOT_CONFIGURED` olarak görünür biçimde başarısız olur ve sonraki çalıştırmada kaldığı yerden devam eder.
 

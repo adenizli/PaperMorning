@@ -61,6 +61,11 @@ export class AccountService {
     return valid ? credentials.user : null;
   }
 
+  /** Operator lookup by username or email (CLI); never exposes credentials. */
+  async findByIdentifier(identifier: string): Promise<UserModel | null> {
+    return (await this.users.findCredentials(normalizeIdentifier(identifier)))?.user ?? null;
+  }
+
   getById(userId: string): Promise<UserModel | null> {
     return this.users.findById(userId);
   }
