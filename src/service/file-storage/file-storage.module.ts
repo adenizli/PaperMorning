@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
-import { FILE_STORAGE, UnavailableFileStorage } from './file-storage';
+import { FILE_STORAGE } from './file-storage';
+import { FileStorageService } from './file-storage.service';
 
 @Module({
-  providers: [{ provide: FILE_STORAGE, useClass: UnavailableFileStorage }],
+  providers: [FileStorageService, { provide: FILE_STORAGE, useExisting: FileStorageService }],
   exports: [FILE_STORAGE],
 })
 export class FileStorageModule {}

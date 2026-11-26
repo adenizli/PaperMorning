@@ -20,7 +20,24 @@ export class AppConfig {
     readonly research: ResearchConfig,
     readonly auth: AuthConfig,
     readonly publication: PublicationConfig,
+    readonly pdf: PdfConfig,
+    readonly storage: StorageConfig,
   ) {}
+}
+
+export interface PdfConfig {
+  timeoutMs: number;
+  maxConcurrency: number;
+  /** Keep Chromium's sandbox on; only disable where the host cannot provide it (see README). */
+  chromiumSandbox: boolean;
+  maxSnapshotBytes: number;
+  /** Optional explicit Chromium binary (otherwise Playwright's installed browser). */
+  executablePath?: string;
+}
+
+export interface StorageConfig {
+  /** Private persistent data directory (PDFs live under <dataDir>/private). Never web-served. */
+  dataDir: string;
 }
 
 export interface PublicationConfig {
@@ -220,6 +237,14 @@ export function loadAppConfig(env: Env = process.env): AppConfig {
       ),
       maxDeliveryAttempts: read.int('MAIL_MAX_ATTEMPTS', 3, 1, 10),
     },
+    {
+      timeoutMs: read.int('PDF_TIMEOUT_MS', 60_000, 1, 600_000),
+      maxConcurrency: read.int('PDF_MAX_CONCURRENCY', 1, 1, 8),
+      chromiumSandbox: read.bool('PDF_CHROMIUM_SANDBOX', true),
+      maxSnapshotBytes: read.int('PDF_MAX_SNAPSHOT_BYTES', 2 * 1024 * 1024, 1024, 50 * 1024 * 1024),
+      executablePath: read.optionalString('PDF_CHROMIUM_EXECUTABLE'),
+    },
+    { dataDir: read.string('DATA_DIR', './data') },
   );
   if (config.publication.publicBaseUrl && !/^https?:\/\//.test(config.publication.publicBaseUrl)) {
     read.problems.push('PUBLIC_BASE_URL must start with http:// or https://');

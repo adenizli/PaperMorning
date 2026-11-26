@@ -46,6 +46,7 @@ Gereksinimler: Node.js 22+, Docker (PostgreSQL için) veya erişilebilir bir Pos
 cp .env.example .env              # yer tutucu parolaları değiştirin
 docker compose up -d postgres     # kalıcı volume ile PostgreSQL
 npm ci
+npx playwright install chromium   # PDF için headless Chromium (~100 MB, bir kez; Linux'ta: --with-deps)
 npm run build
 npm run migration:run             # şema yalnızca açık migration'larla oluşur (synchronize: false)
 npm start                         # http://localhost:3000/api/health
@@ -60,6 +61,19 @@ npm start                         # http://localhost:3000/api/health
 | `npm run test:unit` | Yalnızca veritabanı gerektirmeyen unit testler |
 | `npm run migration:run` / `migration:revert` / `migration:show` | Derlenmiş `dist/` üzerinden migration yönetimi |
 | `npm run migration:generate -- src/service/persistence/migrations/<Ad>` | Entity değişikliğinden migration taslağı üretir (gözden geçirilerek commit edilir) |
+
+### Docker ile tek komutla (sunucu + PostgreSQL)
+
+```bash
+cp .env.example .env              # POSTGRES_PASSWORD, JWT_SECRET vb. doldurun
+docker compose up -d --build      # migration'lar açılışta açıkça çalıştırılır, ardından sunucu başlar
+curl http://127.0.0.1:3000/api/health
+```
+
+- İmaj: Node 22 + Playwright'ın kurduğu Chromium headless shell ve sistem kütüphaneleri + Türkçe karakter kapsamı için `fonts-dejavu-core` ve `fonts-noto-core` (Debian paketleri; repoda font dosyası yok). Boyut yaklaşık 1,5 GB; tarayıcı indirmesi bunun önemli bir kısmıdır.
+- PDF'ler `papermorning-data` volume'ünde (`/data/private`) saklanır; web kökünden **asla** sunulmaz, yalnızca sahiplik kontrollü `GET /api/issues/:id/pdf` ile indirilir. Veritabanı ve bu volume birlikte yedeklenmelidir.
+- **Chromium sandbox ve konteyner sertleştirme:** Normal bir makinede `PDF_CHROMIUM_SANDBOX=true` (varsayılan). Ayrıcalıksız bir Docker konteynerinde Chromium'un kendi sandbox'ı başlatılamıyor (sertleştirilmiş konteynerde yeniden doğrulandı: `Chromium sandboxing failed!`), bu yüzden compose dosyası `false` kullanır. Bunun yerine konteynerin kendisi sınırdır: root olmayan kullanıcı, `cap_drop: [ALL]` (etkin yetki seti boş), `no-new-privileges`, Docker'ın varsayılan seccomp profili, salt okunur kök dosya sistemi (yazılabilir yalnızca `/data` volume'u ve `noexec` 256 MB `/tmp` tmpfs), `pids_limit: 256`, 1.5 GB bellek sınırı ve yetim Chromium süreçlerini toplayan `init`. Ayrıca belgede JavaScript kapalıdır, tüm ağ ve `file://` istekleri engellenir ve içerik tamamen kaçışlanmış sunucu verisidir. Bu ayarlarla gerçek Chromium render'ı ve `/data`'ya kalıcı yazma konteyner içinde doğrulandı. **Kalan sınırlama:** bu önlemler Chromium sandbox'ının süreç içi izolasyonuna eşdeğer değildir; render sürecindeki bir istismar konteyner içindeki Node süreciyle aynı kullanıcıyı ve `/data`'daki PDF arşivini görebilir. Sandbox'ı konteynerde açmak isteyen operatör Chromium'a uygun bir seccomp profili (veya user namespace desteği) sağlamalıdır.
+- Makine uyku/kapalıysa zamanlanmış işler çalışamaz; sürekli açık bir ortam gerekir.
 
 ### Hesap ve oturum
 
@@ -90,7 +104,7 @@ npm run cli -- delivery:resolve --delivery <id> --as SENT|RETRY                 
 - **Eşzamanlılık:** Sayı hazırlama çalıştırması, yazı varyantları ve Ufuk Raporu üretimi süreli claim + fencing token ile korunur; süresi dolup devralınan bir işi eski worker artık yazamaz. Bir sayının PDF'ini aynı anda tek bir worker oluşturur (render claim); PDF anahtarı içerik adreslidir (`issues/<kullanıcı>/<sayı>-<sha256>.pdf`), bu yüzden READY sayının dosyası hiçbir yazıcı tarafından değiştirilemez. Saklanıp doğrulanmış ama READY'ye geçememiş bir PDF yeniden denemede tekrar render edilmeden kullanılır.
 - **Ufuk Raporu paylaşımı:** Aynı araştırma paketi, dil, bilgi düzeyi, model ve prompt sürümü için rapor bir kez üretilir (`outlook_generation` teknik claim/önbellek tablosu). Rapor, onu üreten sayı sonradan başarısız olsa bile kalıcıdır ve diğer okurlar tarafından yeniden kullanılır; rapor modeli yine sayı içeriğinin parçasıdır.
 - E-posta yalnızca **açıkça abone olan** okura, sayı READY ve PDF doğrulanmışsa gider; PDF **her zaman ektir**. SMTP sonucu belirsizse durum `UNKNOWN` olur ve otomatik yeniden gönderilmez.
-- PDF oluşturucu ve SMTP adaptörü ayrı görevlerdir (P0-04, P0-05). Bunlar bağlanana kadar PDF oluşturma açıkça başarısız olur ve teslimat `DISABLED` görünür; hiçbir adım başarılı gibi gösterilmez.
+- PDF, dondurulmuş anlık görüntüden sunucuda headless Chromium ile üretilir (LLM yok, ağ erişimi yok) ve atomik olarak özel depoya yazılır; sayı ancak PDF doğrulandıktan sonra READY olur. SMTP adaptörü ayrı bir görevdir (P0-05); bağlanana kadar teslimat `DISABLED` görünür.
 
 Desteklenen konu anahtarları `src/common/topic/topic-catalog.ts` içindedir. `ANTHROPIC_API_KEY` yoksa keşif ve kural tabanlı eleme yine çalışır; analiz `NOT_CONFIGURED` olarak görünür biçimde başarısız olur ve sonraki çalıştırmada kaldığı yerden devam eder.
 
