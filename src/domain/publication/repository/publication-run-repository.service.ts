@@ -122,16 +122,19 @@ export class PublicationRunRepositoryService {
     return toModel(await this.repo.findOneByOrFail({ id }));
   }
 
-  /** Records (once) that the reader's issue was not ready at the delivery deadline. */
+  /**
+   * Records (once) that the reader's issue was not ready at the delivery deadline. A run that
+   * already completed (issue READY) is never marked late afterwards.
+   */
   async markLate(userId: string, issueDate: string, at: Date): Promise<void> {
     await this.repo
       .createQueryBuilder()
       .update()
       .set({ lateAt: at })
-      .where('user_id = :userId AND issue_date = :issueDate AND late_at IS NULL', {
-        userId,
-        issueDate,
-      })
+      .where(
+        'user_id = :userId AND issue_date = :issueDate AND late_at IS NULL AND status <> :completed',
+        { userId, issueDate, completed: PublicationRunStatus.COMPLETED },
+      )
       .execute();
   }
 

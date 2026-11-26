@@ -3,6 +3,7 @@ import { INestApplicationContext, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import { SUPPORTED_TOPIC_KEYS } from '../common/topic/topic-catalog';
+import { DailyPublicationScheduler } from '../core/scheduler/daily-publication.scheduler';
 import { AccountService } from '../domain/account/service/account.service';
 import { DeliveryService } from '../domain/publication/service/delivery.service';
 import { PublicationService } from '../domain/publication/service/publication.service';
@@ -18,6 +19,8 @@ import { LlmService, startOfUtcDay } from '../service/llm/llm.service';
  *   npm run cli -- publication:prepare --user <username|email> --date 2026-11-24
  *   npm run cli -- delivery:send --user <username|email> --date 2026-11-24      (real send; opt-in + READY required)
  *   npm run cli -- delivery:resolve --delivery <id> --as SENT|RETRY             (operator decision for UNKNOWN)
+ *   npm run cli -- scheduler:plan [--at 2026-11-24T05:00:00Z]                    (dry run: never prepares or sends)
+ *   npm run cli -- scheduler:tick [--at <ISO instant>] [--send]                  (real preparation; emails only with --send)
  */
 type Args = Record<string, string | undefined>;
 
@@ -80,7 +83,42 @@ const commands: Record<string, (app: INestApplicationContext, args: Args) => Pro
     const delivery = await app.get(DeliveryService).resolveUnknown(args.delivery, args.as);
     return { id: delivery.id, status: delivery.status };
   },
+  'scheduler:plan': async (app, args) => {
+    const scheduler = app.get(DailyPublicationScheduler);
+    const at = requireInstant(args);
+    const prepare = await scheduler.runPreparation(at, { dryRun: true });
+    const deliver = await scheduler.runDelivery(at, { dryRun: true });
+    return { at: at.toISOString(), readers: merge(prepare, deliver) };
+  },
+  'scheduler:tick': async (app, args) => {
+    const scheduler = app.get(DailyPublicationScheduler);
+    const at = requireInstant(args);
+    const prepare = await scheduler.runPreparation(at);
+    const deliver = await scheduler.runDelivery(at, { dryRun: args.send !== 'true' });
+    return {
+      at: at.toISOString(),
+      emailsSent: args.send === 'true',
+      readers: merge(prepare, deliver),
+    };
+  },
 };
+
+function requireInstant(args: Args): Date {
+  const at = args.at ? new Date(args.at) : new Date();
+  if (Number.isNaN(at.getTime()))
+    throw new Error('--at must be an ISO-8601 instant, e.g. 2026-11-24T05:00:00Z');
+  return at;
+}
+
+function merge(
+  prepare: Awaited<ReturnType<DailyPublicationScheduler['runPreparation']>>,
+  deliver: Awaited<ReturnType<DailyPublicationScheduler['runDelivery']>>,
+) {
+  return prepare.map((p) => ({
+    ...p,
+    delivery: deliver.find((d) => d.userId === p.userId)?.delivery,
+  }));
+}
 
 async function requireUser(app: INestApplicationContext, args: Args): Promise<string> {
   if (!args.user) throw new Error('--user <username|email> is required');
@@ -120,6 +158,8 @@ async function main(): Promise<void> {
     process.exitCode = 2;
     return;
   }
+  // CLI processes never run the cron ticks; the long-running server owns scheduling.
+  process.env.SCHEDULER_ENABLED = 'false';
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
   });

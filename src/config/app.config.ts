@@ -23,7 +23,27 @@ export class AppConfig {
     readonly pdf: PdfConfig,
     readonly storage: StorageConfig,
     readonly mail: MailConfig,
+    readonly scheduler: SchedulerConfig,
   ) {}
+}
+
+export interface SchedulerConfig {
+  /** Disabled for CLI processes and tests; exactly one server process must run it. */
+  enabled: boolean;
+  /** Reader-local time (HH:mm) at which preparation of the day's issue starts. */
+  prepareLocalTime: string;
+  /** Reader-local delivery target; product constant 08:00. */
+  deliveryLocalTime: string;
+  /**
+   * Minutes after the delivery time during which a late-but-READY issue is still emailed.
+   * After that the issue stays on the web/archive but no email is sent for that day.
+   */
+  lateWindowMinutes: number;
+  /**
+   * Readers prepared at the same time by one process. Bounded so Claude/Chromium load stays
+   * predictable; spend is additionally capped by the atomic daily budget reservations.
+   */
+  preparationConcurrency: number;
 }
 
 export type SmtpSecurity = 'tls' | 'starttls' | 'none';
@@ -266,7 +286,19 @@ export function loadAppConfig(env: Env = process.env): AppConfig {
     },
     { dataDir: read.string('DATA_DIR', './data') },
     readMailConfig(read, nodeEnv),
+    {
+      enabled: read.bool('SCHEDULER_ENABLED', nodeEnv !== 'test'),
+      prepareLocalTime: read.string('SCHEDULER_PREPARE_LOCAL_TIME', '06:00'),
+      deliveryLocalTime: '08:00',
+      lateWindowMinutes: read.int('SCHEDULER_LATE_WINDOW_MINUTES', 120, 0, 720),
+      preparationConcurrency: read.int('SCHEDULER_PREPARATION_CONCURRENCY', 2, 1, 8),
+    },
   );
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(config.scheduler.prepareLocalTime)) {
+    read.problems.push('SCHEDULER_PREPARE_LOCAL_TIME must be HH:mm');
+  } else if (config.scheduler.prepareLocalTime >= config.scheduler.deliveryLocalTime) {
+    read.problems.push('SCHEDULER_PREPARE_LOCAL_TIME must be before the 08:00 delivery time');
+  }
   if (config.publication.publicBaseUrl && !/^https?:\/\//.test(config.publication.publicBaseUrl)) {
     read.problems.push('PUBLIC_BASE_URL must start with http:// or https://');
   }

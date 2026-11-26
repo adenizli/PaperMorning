@@ -12,6 +12,8 @@ import { AuthService } from '../../src/core/auth/auth.service';
 import { PublicationModule } from '../../src/domain/publication/publication.module';
 import { DeliveryService } from '../../src/domain/publication/service/delivery.service';
 import { PublicationService } from '../../src/domain/publication/service/publication.service';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { DailyPublicationScheduler } from '../../src/core/scheduler/daily-publication.scheduler';
 import { HealthController } from '../../src/core/health/health.controller';
 import { DatabaseHealthService } from '../../src/service/persistence/database-health.service';
 import { createTestApp } from '../support/test-app';
@@ -60,6 +62,13 @@ describe('AppModule initialization', () => {
       PublicationService,
       DeliveryService,
     ]);
+  });
+
+  it('registers exactly the two minute-level scheduler ticks (no cron per user)', () => {
+    expect(app.get(DailyPublicationScheduler)).toBeInstanceOf(DailyPublicationScheduler);
+    const jobs = app.get(SchedulerRegistry).getCronJobs();
+    expect([...jobs.keys()].sort()).toEqual(['daily-delivery', 'daily-preparation']);
+    expect(app.get(AppConfig).scheduler.enabled).toBe(false); // ticks are no-ops in tests
   });
 
   it('never synchronizes the schema automatically', () => {

@@ -174,6 +174,13 @@ export class DeliveryService {
     return this.deliveries.resolveUnknown(deliveryId, resolution);
   }
 
+  /** Current email state for a reader's issue of a given local date (null: none attempted). */
+  async statusFor(userId: string, issueDate: string): Promise<DeliveryStatus | null> {
+    const issue = await this.issues.findByUserDate(userId, issueDate);
+    if (!issue) return null;
+    return (await this.deliveries.findByIssue(issue.id))?.status ?? null;
+  }
+
   findForIssue(issueId: string): Promise<EmailDeliveryModel | null> {
     return this.deliveries.findByIssue(issueId);
   }
