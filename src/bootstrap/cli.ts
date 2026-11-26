@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { ConsoleLogger, INestApplicationContext, LogLevel } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { config as loadDotenv } from 'dotenv';
-import { existsSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { isAbsolute, join, relative, resolve } from 'path';
 import { AppModule } from '../app.module';
@@ -11,6 +11,7 @@ import { sha256Hex } from '../common/text/fingerprint';
 import { AppConfig, loadAppConfig } from '../config/app.config';
 import { DailyPublicationScheduler } from '../core/scheduler/daily-publication.scheduler';
 import { AccountService } from '../domain/account/service/account.service';
+import type { IssueContentModel } from '../domain/publication/model/issue-content.model';
 import { DeliveryService } from '../domain/publication/service/delivery.service';
 import { IssueService } from '../domain/publication/service/issue.service';
 import { describePublicationStatus } from '../domain/publication/service/publication-status';
@@ -38,7 +39,7 @@ import { runPdfSmoke } from './pdf-smoke';
  *   scheduler:plan [--at 2026-11-24T05:00:00Z]                    (dry run: never prepares or sends)
  *   scheduler:tick [--at <ISO instant>] [--send]                  (real preparation; emails only with --send)
  *   system:check                                                  (read-only effective configuration)
- *   pdf:smoke [--out <file.pdf>|-]                                (no database: real Chromium render)
+ *   pdf:smoke [--snapshot <issue.json>] [--out <file.pdf>|-]      (no database: real Chromium render)
  */
 type Args = Record<string, string | undefined>;
 type Command = (app: INestApplicationContext, args: Args) => Promise<CliResult>;
@@ -337,7 +338,16 @@ async function main(): Promise<void> {
       print(command, { outcome: 'ERROR', error: (error as Error).message }, resultStream);
       return;
     }
-    const { result, pdf } = await runPdfSmoke(config);
+    let snapshot: IssueContentModel | undefined;
+    if (args.snapshot) {
+      try {
+        snapshot = JSON.parse(readFileSync(resolve(args.snapshot), 'utf8')) as IssueContentModel;
+      } catch (error) {
+        print(command, { outcome: 'USAGE_ERROR', error: (error as Error).message }, resultStream);
+        return;
+      }
+    }
+    const { result, pdf } = await runPdfSmoke(config, snapshot);
     if (pdf && args.out === '-') process.stdout.write(pdf);
     else if (pdf && args.out) writeFileSync(resolve(args.out), pdf, { flag: 'wx' });
     print(command, { ...result }, resultStream);

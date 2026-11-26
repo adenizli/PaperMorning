@@ -25,13 +25,29 @@ describe('print layout (real Chromium, issue-print-v2)', () => {
       mkdirSync(pngDir, { recursive: true });
       writeFileSync(join(qaDir, `${name}.pdf`), pdf);
     }
-    return inspectPdf(pdf, { pngDir });
+    const doc = inspectPdf(pdf, { pngDir });
+    rendered.push(doc);
+    return doc;
   }
 
   const pageOf = (doc: PdfInspection, needle: string) =>
     doc.pageTexts.findIndex((t) => t.replace(/\s+/g, ' ').includes(needle)) + 1;
   const titles = (nodes: PdfInspection['outline']): string[] =>
     nodes.flatMap((n) => [n.title, ...titles(n.items)]);
+  /** Chromium on Linux repeats titles of headings layout moved to the next page (repaired). */
+  const repeated = (doc: PdfInspection) =>
+    titles(doc.outline).filter((t) => {
+      for (let n = 2; n <= 4; n++) {
+        const unit = t.length / n;
+        if (Number.isInteger(unit) && unit > 0 && t === t.slice(0, unit).repeat(n)) return true;
+      }
+      return false;
+    });
+
+  afterEach(() => {
+    for (const doc of rendered.splice(0)) expect(repeated(doc)).toEqual([]);
+  });
+  const rendered: PdfInspection[] = [];
 
   it('one paper (first-issue volume, v1 snapshot): a compact briefing instead of nine pages', async () => {
     const content = firstIssueLike();

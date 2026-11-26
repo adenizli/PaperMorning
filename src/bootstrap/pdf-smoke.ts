@@ -2,6 +2,7 @@ import { ContentCoverage, PublicationStatus } from '../common/enum/research.enum
 import { AppConfig } from '../config/app.config';
 import { KnowledgeLevel, TopicPriority } from '../domain/account';
 import type { IssueContentModel } from '../domain/publication/model/issue-content.model';
+import { validateIssueContent } from '../domain/publication/service/issue.service';
 import { ISSUE_TEMPLATE_VERSION } from '../service/pdf/issue-html.template';
 import { describeSandbox, PdfService } from '../service/pdf/pdf.service';
 
@@ -102,12 +103,18 @@ export interface PdfSmokeResult {
  */
 export async function runPdfSmoke(
   config: AppConfig,
+  snapshot?: IssueContentModel,
 ): Promise<{ result: PdfSmokeResult; pdf?: Buffer }> {
   const started = Date.now();
   const base = { template: ISSUE_TEMPLATE_VERSION, sandbox: describeSandbox(config) };
   try {
-    const pdf = await new PdfService(config).render(smokeSnapshot(), {
-      preview: { note: 'PDF duman testi — yapay içerik, yayımlanmış bir sayı değildir.' },
+    if (snapshot) validateIssueContent(snapshot);
+    const pdf = await new PdfService(config).render(snapshot ?? smokeSnapshot(), {
+      preview: {
+        note: snapshot
+          ? 'QA ÖNİZLEMESİ — dosyadan dizilmiş anlık görüntü; yayımlanmış sayı değildir.'
+          : 'PDF duman testi — yapay içerik, yayımlanmış bir sayı değildir.',
+      },
     });
     const raw = pdf.toString('latin1');
     if (!raw.startsWith('%PDF-') || !raw.slice(-1024).includes('%%EOF')) {
@@ -115,7 +122,7 @@ export async function runPdfSmoke(
     }
     const pages = raw.match(/\/Type\s*\/Page(?![s\w])/g)?.length ?? 0;
     if (pages < 1) throw new Error('PDF has no pages');
-    if (!raw.includes(SMOKE_LINK)) throw new Error('source link annotation missing');
+    if (!snapshot && !raw.includes(SMOKE_LINK)) throw new Error('source link annotation missing');
     return {
       result: {
         outcome: 'OK',

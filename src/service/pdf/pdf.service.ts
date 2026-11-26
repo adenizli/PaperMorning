@@ -4,6 +4,7 @@ import { AppConfig } from '../../config/app.config';
 import type { IssueContentModel } from '../../domain/publication/model/issue-content.model';
 import { escapeHtml } from '../../common/text/escape-html';
 import { ISSUE_TEMPLATE_VERSION, RenderIssueOptions, renderIssueHtml } from './issue-html.template';
+import { headingTexts, repairOutlineTitles } from './pdf-outline';
 import { PdfRenderer, PdfRenderError } from './pdf-renderer';
 
 const footer = (label: string) =>
@@ -95,7 +96,9 @@ export class PdfService implements PdfRenderer, OnModuleInit {
       if (pdf.subarray(0, 5).toString('latin1') !== '%PDF-') {
         throw new PdfRenderError('Chromium did not return a PDF document');
       }
-      return pdf;
+      const { pdf: repaired, repaired: count } = repairOutlineTitles(pdf, headingTexts(html));
+      if (count > 0) this.logger.debug(`Repaired ${count} duplicated bookmark title(s)`);
+      return repaired;
     } catch (error) {
       if (error instanceof PdfRenderError) {
         await closeBrowser(); // timed out: stop Chromium now if it is already running
