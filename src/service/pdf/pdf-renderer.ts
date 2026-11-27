@@ -1,4 +1,5 @@
 import type { IssueContentModel } from '../../domain/publication/model/issue-content.model';
+import type { RenderIssueOptions } from './issue-html.template';
 
 export const PDF_RENDERER = Symbol('PDF_RENDERER');
 
@@ -7,7 +8,7 @@ export const PDF_RENDERER = Symbol('PDF_RENDERER');
  * PDF bytes. Deterministic: no LLM, no research, no network.
  */
 export interface PdfRenderer {
-  render(content: IssueContentModel): Promise<Buffer>;
+  render(content: IssueContentModel, options?: RenderIssueOptions): Promise<Buffer>;
 }
 
 export class PdfRenderError extends Error {

@@ -44,6 +44,8 @@ export interface PublicationRunModel {
   errorKind: string | null;
   errorMessage: string | null;
   nextAttemptAt: Date | null;
+  /** While RUNNING: the claim's lease; after it, another worker may take the run over. */
+  leaseExpiresAt: Date | null;
   lateAt: Date | null;
   issueId: string | null;
   startedAt: Date;

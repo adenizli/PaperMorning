@@ -4,7 +4,11 @@ import type { SourceReferenceModel } from '../../research';
 import type { ArticleSection } from './article-variant.model';
 import type { OutlookReportModel } from './outlook-report.model';
 
-export const ISSUE_CONTENT_SCHEMA_VERSION = 1;
+/**
+ * v2: optional `notReported` per article and optional `mode`/`contrasts` on the Ufuk Raporu.
+ * Readers of the snapshot (web, PDF) must keep accepting v1 snapshots unchanged.
+ */
+export const ISSUE_CONTENT_SCHEMA_VERSION = 2;
 export const OUTLOOK_CONTENT_KEY = 'outlook';
 
 export type ArticleRole = 'COVER' | 'FEATURE' | 'BRIEF';
@@ -24,6 +28,8 @@ export interface IssueArticle {
   whyItMatters: string;
   sections: ArticleSection[];
   glossary: { term: string; explanation: string }[];
+  /** Questions the source leaves unanswered (v2+; absent in v1 snapshots). */
+  notReported?: string[];
   source: {
     title: string;
     authors: string[];

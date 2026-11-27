@@ -181,6 +181,7 @@ function toModel(e: PublicationRunEntity): PublicationRunModel {
     errorKind: e.errorKind,
     errorMessage: e.errorMessage,
     nextAttemptAt: e.nextAttemptAt,
+    leaseExpiresAt: e.leaseExpiresAt,
     lateAt: e.lateAt,
     issueId: e.issueId,
     startedAt: e.startedAt,

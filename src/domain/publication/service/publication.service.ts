@@ -17,7 +17,7 @@ import { PublicationRunRepositoryService } from '../repository/publication-run-r
 import { ArticleWritingService } from './article-writing.service';
 import { EditorialService } from './editorial.service';
 import { ComposedArticle, IssueService } from './issue.service';
-import { OutlookService } from './outlook.service';
+import { OUTLOOK_PROMPT_VERSION, OutlookService } from './outlook.service';
 import { PublicationError } from './publication-error';
 
 /** Bounded wait for another worker's in-flight research run of the same topic/day. */
@@ -202,7 +202,9 @@ export class PublicationService {
       }
     }
 
-    if (!checkpoint.outlook) {
+    // A report checkpointed by an older prompt version (run interrupted across an upgrade) is not
+    // reused; the current version is fetched from cache or written.
+    if (checkpoint.outlook?.promptVersion !== OUTLOOK_PROMPT_VERSION) {
       run = await lease.checkpoint(PublicationStage.OUTLOOK, checkpoint);
       const leadLevel = [...profile.topics].sort((a, b) => rank(b.priority) - rank(a.priority))[0]
         .knowledgeLevel;

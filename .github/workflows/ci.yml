@@ -34,8 +34,17 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
+      # Disposable development mail sink (same pinned image as docker-compose.yml); the delivery
+      # test sends real SMTP to it and verifies the PDF attachment through its API.
+      mailpit:
+        image: axllent/mailpit:v1.27
+        ports:
+          - 1025:1025
+          - 8025:8025
     env:
       TEST_DATABASE_URL: postgres://pm_ci:pm_ci_disposable@localhost:5432/papermorning_test
+      MAILPIT_API_URL: http://localhost:8025
+      MAILPIT_SMTP_PORT: '1025'
       CI_MIGRATION_DATABASE_URL: postgres://pm_ci:pm_ci_disposable@localhost:5432/papermorning_migrate_ci
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -94,3 +103,46 @@ jobs:
           "
           DATABASE_URL="$CI_MIGRATION_DATABASE_URL" npm run migration:run
           DATABASE_URL="$CI_MIGRATION_DATABASE_URL" npm run migration:show
+
+  # The production image under the same hardening as docker-compose.yml (non-root, read-only root
+  # filesystem, all capabilities dropped, no-new-privileges, noexec /tmp). Reproduces the production
+  # failure "Chromium sandboxing failed!": a host-style .env with PDF_CHROMIUM_SANDBOX=true must not
+  # reach the container. Needs no database, no Claude key and no SMTP.
+  container-pdf-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Host-style .env (throwaway values for this runner only)
+        run: |
+          {
+            echo "NODE_ENV=production"
+            echo "POSTGRES_PASSWORD=ci-disposable-not-a-secret"
+            echo "JWT_SECRET=ci-only-jwt-secret-not-used-anywhere-0123456789"
+            echo "PDF_CHROMIUM_SANDBOX=true"
+            echo "SCHEDULER_ENABLED=false"
+            echo "MAIL_ENABLED=false"
+          } > .env
+
+      - name: Build the production image
+        run: docker compose build server
+
+      - name: PDF smoke test inside the hardened container
+        run: |
+          docker compose run --rm --no-deps -T server node dist/bootstrap/cli.js pdf:smoke --out - > smoke.pdf
+          head -c 5 smoke.pdf | grep -q '%PDF-'
+          ls -l smoke.pdf
+
+      - name: An explicit PDF_CHROMIUM_SANDBOX=true inside the container is refused at startup
+        run: |
+          set +e
+          docker compose run --rm --no-deps -T -e PDF_CHROMIUM_SANDBOX=true server \
+            node dist/bootstrap/cli.js pdf:smoke > refused.json
+          code=$?
+          set -e
+          cat refused.json
+          test "$code" -eq 1
+          grep -q 'PDF_CHROMIUM_SANDBOX=true cannot work inside the PaperMorning container' refused.json

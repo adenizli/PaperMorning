@@ -1,12 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { chromium, type Browser } from 'playwright';
 import { AppConfig } from '../../config/app.config';
 import type { IssueContentModel } from '../../domain/publication/model/issue-content.model';
-import { renderIssueHtml } from './issue-html.template';
+import { escapeHtml } from '../../common/text/escape-html';
+import { ISSUE_TEMPLATE_VERSION, RenderIssueOptions, renderIssueHtml } from './issue-html.template';
+import { headingTexts, repairOutlineTitles } from './pdf-outline';
 import { PdfRenderer, PdfRenderError } from './pdf-renderer';
 
-const FOOTER = `<div style="width:100%;font-size:8px;color:#666;text-align:center;font-family:Helvetica,Arial,sans-serif">
-PaperMorning · <span class="pageNumber"></span> / <span class="totalPages"></span></div>`;
+const footer = (label: string) =>
+  `<div style="width:100%;font-size:8px;color:#666;text-align:center;font-family:'Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif">
+${escapeHtml(label)} · <span class="pageNumber"></span> / <span class="totalPages"></span></div>`;
 
 /**
  * Server-side HTML -> PDF with headless Chromium (Playwright). One short-lived browser per render:
@@ -14,14 +17,18 @@ PaperMorning · <span class="pageNumber"></span> / <span class="totalPages"></sp
  * browser is always closed. No LLM, no research, no external resources.
  */
 @Injectable()
-export class PdfService implements PdfRenderer {
+export class PdfService implements PdfRenderer, OnModuleInit {
   private readonly logger = new Logger(PdfService.name);
   private active = 0;
   private readonly waiting: (() => void)[] = [];
 
   constructor(private readonly config: AppConfig) {}
 
-  async render(content: IssueContentModel): Promise<Buffer> {
+  onModuleInit(): void {
+    this.logger.log(`PDF template ${ISSUE_TEMPLATE_VERSION}; ${describeSandbox(this.config)}`);
+  }
+
+  async render(content: IssueContentModel, options: RenderIssueOptions = {}): Promise<Buffer> {
     const size = Buffer.byteLength(JSON.stringify(content));
     if (size > this.config.pdf.maxSnapshotBytes) {
       throw new PdfRenderError(
@@ -29,11 +36,14 @@ export class PdfService implements PdfRenderer {
         false,
       );
     }
-    return this.renderHtml(renderIssueHtml(content));
+    const footerLabel = options.preview
+      ? 'QA ÖNİZLEMESİ — yayımlanmış sayı değildir'
+      : 'PaperMorning';
+    return this.renderHtml(renderIssueHtml(content, options), footerLabel);
   }
 
   /** Exposed for tests of the isolation guarantees; production callers use render(). */
-  async renderHtml(html: string): Promise<Buffer> {
+  async renderHtml(html: string, footerLabel = 'PaperMorning'): Promise<Buffer> {
     await this.acquire();
     const { timeoutMs } = this.config.pdf;
     let browser: Browser | undefined;
@@ -57,7 +67,7 @@ export class PdfService implements PdfRenderer {
         preferCSSPageSize: true,
         displayHeaderFooter: true,
         headerTemplate: '<div></div>',
-        footerTemplate: FOOTER,
+        footerTemplate: footer(footerLabel),
         tagged: true,
         outline: true,
       });
@@ -86,13 +96,20 @@ export class PdfService implements PdfRenderer {
       if (pdf.subarray(0, 5).toString('latin1') !== '%PDF-') {
         throw new PdfRenderError('Chromium did not return a PDF document');
       }
-      return pdf;
+      const { pdf: repaired, repaired: count } = repairOutlineTitles(pdf, headingTexts(html));
+      if (count > 0) this.logger.debug(`Repaired ${count} duplicated bookmark title(s)`);
+      return repaired;
     } catch (error) {
       if (error instanceof PdfRenderError) {
         await closeBrowser(); // timed out: stop Chromium now if it is already running
         throw error;
       }
-      throw new PdfRenderError(`Chromium PDF rendering failed: ${(error as Error).message}`);
+      const message = (error as Error).message;
+      const hint =
+        this.config.pdf.chromiumSandbox && /sandbox/i.test(message)
+          ? ` (Chromium sandbox is ON [${this.config.pdf.chromiumSandboxSource}, runtime ${this.config.pdf.runtime}]; inside a container use PDF_CHROMIUM_SANDBOX=auto or false — see README "Chromium sandbox")`
+          : '';
+      throw new PdfRenderError(`Chromium PDF rendering failed: ${message}${hint}`);
     } finally {
       clearTimeout(timer);
     }
@@ -110,4 +127,11 @@ export class PdfService implements PdfRenderer {
     this.active--;
     this.waiting.shift()?.();
   }
+}
+
+export function describeSandbox(config: AppConfig): string {
+  const { chromiumSandbox, chromiumSandboxSource, runtime } = config.pdf;
+  return chromiumSandbox
+    ? `Chromium sandbox ON (${chromiumSandboxSource}, runtime ${runtime})`
+    : `Chromium sandbox OFF (${chromiumSandboxSource}, runtime ${runtime}): the hardened container/host account is the isolation boundary`;
 }

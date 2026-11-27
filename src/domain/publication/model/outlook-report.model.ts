@@ -29,14 +29,23 @@ export interface IndustryOpportunity {
   paperKeys: string[];
 }
 
+/**
+ * SINGLE_STUDY: critical commentary on one paper (no cross-paper trends or consensus).
+ * CROSS_STUDY: synthesis across several papers. Absent on reports written before outlook-v2.
+ */
+export type OutlookMode = 'SINGLE_STUDY' | 'CROSS_STUDY';
+
 export interface OutlookReportModel {
   fingerprint: string;
   title: string;
+  mode?: OutlookMode;
   synthesis: OutlookClaim;
   /** "Kaynakların gösterdiği": facts reported by the cited papers. */
   evidence: OutlookClaim[];
   /** "PaperMorning yorumu": cross-paper inference, explicitly not established fact. */
   inferences: OutlookClaim[];
+  /** CROSS_STUDY only: where the papers agree or disagree; each item cites at least two papers. */
+  contrasts?: OutlookClaim[];
   academicOpportunities: AcademicOpportunity[];
   industryOpportunities: IndustryOpportunity[];
   development: { direction: string; uncertainties: string[]; falsifiers: string[] };

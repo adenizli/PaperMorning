@@ -1,3 +1,4 @@
+import { findAbsenceInferences } from '../../../common/text/evidence-grounding';
 import { findUnsupportedNumbers } from '../../../common/text/numeric-claims';
 import type { PaperAnalysisContent } from '../model/paper-analysis.model';
 
@@ -70,6 +71,23 @@ export function validateAnalysisOutput(
   if (unsupported.length > 0) {
     throw new AnalysisValidationError(
       `Numbers not present in the source text: ${unsupported.slice(0, 5).join(', ')}`,
+    );
+  }
+  // Deterministic only (no prompt change): applies to newly written analyses; cached analyses
+  // keep their fingerprint. Downstream writers treat the abstract as the authority anyway.
+  const absence = findAbsenceInferences(
+    [
+      content.summary,
+      content.contribution,
+      content.methods,
+      ...content.findings.flatMap((f) => [f.statement, f.evidence]),
+      ...content.limitations,
+    ],
+    sourceText,
+  );
+  if (absence.length > 0) {
+    throw new AnalysisValidationError(
+      `Conclusion about unreported cases (${absence[0].partition} reported): "${absence[0].sentence.slice(0, 200)}"`,
     );
   }
   if (abstractOnly && !content.limitations.includes(ABSTRACT_ONLY_LIMITATION)) {

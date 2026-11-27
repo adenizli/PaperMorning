@@ -23,6 +23,11 @@ export interface ArticleContent {
   whyItMatters: string;
   sections: ArticleSection[];
   glossary: { term: string; explanation: string }[];
+  /**
+   * What a reader would naturally ask but the source does not report (schema v2+). Always framed
+   * as unknown, never answered. Absent on variants written before article-v2.
+   */
+  notReported?: string[];
 }
 
 /**
