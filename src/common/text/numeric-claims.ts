@@ -32,8 +32,9 @@
  *           "parametre", "token", "$", ... -> billion only; "poz", "görüntü", "nokta bulutu",
  *           ... -> dimension only; otherwise either reading, each needing its OWN source evidence
  *           (source "3D" supports "3B" as a dimension, never "3 milyar").
- *   - K  -> thousand, or kelvin (quantum-physics abstracts write "4 K"/"4K"); kelvin needs a
- *           kelvin mention in the source.
+ *   - K  -> glued ("4K"): thousand or kelvin, each needing its own evidence. Spaced "4 K" and
+ *           "300 kelvin" are explicit temperatures: kelvin evidence ONLY (no 0-10 tolerance, no
+ *           support from a bare count). "4 K-fold" is not a temperature.
  *   - k, M, bn -> thousand / million / billion only.
  *   - Turkish scale words (bin, milyon, milyar, trilyon) are read only in Turkish text: in an
  *     English source "10 bin histogram" is ten bins, not ten thousand.
@@ -93,7 +94,7 @@ const NUMBER = new RegExp(
 const LETTER_SUFFIX = /^(?:(-?D)|(k|K|M|B|bn))(?![\p{L}\d])/u;
 const DIMENSION_WORD =
   /^(?:[ \u00A0\u202F]|[ \u00A0\u202F]?-)?(?:boyut\p{L}*|dimension(?:al|s)?(?!\p{L}))/iu;
-const KELVIN_SPACED = /^[ \u00A0\u202F](?:K(?![\p{L}\d])|[Kk]elvin\p{L}*)/u;
+const KELVIN_SPACED = /^[ \u00A0\u202F](?:K(?![\p{L}\d-])|[Kk]elvin\p{L}*)/u;
 const SCALE_WORD = /^[ \u00A0\u202F]+(\p{L}+)/u;
 const SCALES: Record<string, number> = {
   thousand: 1e3,
@@ -297,9 +298,11 @@ function affixAt(text: string, start: number, end: number, locale: NumberLocale)
   const kelvin = KELVIN_SPACED.exec(rest);
   if (kelvin) {
     return {
+      // An explicit temperature: kelvin evidence only. No bare-number reading, so neither the
+      // 0-10 tolerance nor an unrelated count ("300 tasks") can support "4 K" or "300 kelvin".
       length: kelvin[0].length,
-      plain: true,
-      readings: (n) => [quantity(n), { kind: 'kelvin', value: n }],
+      plain: false,
+      readings: (n) => [{ kind: 'kelvin', value: n }],
     };
   }
   const word = SCALE_WORD.exec(rest);

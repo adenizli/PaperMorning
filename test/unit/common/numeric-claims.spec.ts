@@ -213,9 +213,10 @@ describe('letters glued to numbers: dimension vs scale vs unit (2026-11-28 "3B" 
     ['3 boyutlu pozlar', 'tr', '3 boyutlu', [dim(3)]],
     ['128-dimensional embeddings', 'en', '128-dimensional', [dim(128)]],
     ['three-dimensional poses', 'en', 'three-dimensional', [dim(3)]],
-    ['cooled to 4 K', 'en', '4 K', [qty(4), kel(4)]],
+    ['cooled to 4 K', 'en', '4 K', [kel(4)]], // explicit temperature: kelvin only
     ["4K'de soğutuldu", 'tr', '4K', [qty(4000), kel(4)]],
-    ['300 kelvin', 'en', '300 kelvin', [qty(300), kel(300)]],
+    ['300 kelvin', 'en', '300 kelvin', [kel(300)]],
+    ["4 Kelvin'de", 'tr', '4 Kelvin', [kel(4)]],
     ['470K rollouts', 'en', '470K', [qty(470_000), kel(470)]],
   ] as const)('%s (%s)', (text, locale, raw, expected) => {
     expect(readings(text, locale)).toEqual([{ raw, readings: expected }]);
@@ -226,6 +227,7 @@ describe('letters glued to numbers: dimension vs scale vs unit (2026-11-28 "3B" 
     ['a 7DOF arm', 'en', '7'],
     ['3d later', 'en', '3'], // lowercase d may be days
     ['5 Kasım', 'tr', '5'], // a month, not kelvin
+    ['a 4 K-fold split', 'en', '4'],
     ['5G networks', 'en', '5'],
   ] as const)('%s (%s) stays a plain number', (text, locale, raw) => {
     expect(readings(text, locale)).toEqual([{ raw, readings: [qty(Number(raw))] }]);
@@ -248,6 +250,8 @@ describe('letters glued to numbers: dimension vs scale vs unit (2026-11-28 "3B" 
     ['a 7B parameter model', '7 milyar parametre', 'tr'],
     ['models predict 3D gripper poses', '3B model', 'tr'], // neutral context, dimension grounded
     ['cooled to 4 K', "4K'de soğutuldu", 'tr'],
+    ['cooled to 4 K', '4 K sıcaklığa soğutuldu', 'tr'],
+    ['measured at 300 K', '300 kelvin', 'en'],
     ['over 300K rollouts', '300 bin deneme', 'tr'],
   ] as const)('accepts %j -> %j', (source, generated, locale) => {
     expect(findUnsupportedNumbers(generated, source, locale)).toEqual([]);
@@ -264,6 +268,10 @@ describe('letters glued to numbers: dimension vs scale vs unit (2026-11-28 "3B" 
     ['128-dimensional embeddings', '128 bin örnek', 'tr', '128 bin'],
     ['on 300 tasks', '300K rollouts', 'en', '300K'], // neither 300 000 nor 300 kelvin
     ['cooled to 4 K', '4 bin deneme', 'tr', '4 bin'], // kelvin cannot vouch for a count
+    ['on 300 tasks', '300 kelvin', 'en', '300 kelvin'], // a count cannot vouch for a temperature
+    ['no temperature reported', '4 K', 'en', '4 K'], // no small-integer tolerance for a unit
+    ['no temperature reported', '4 kelvin', 'en', '4 kelvin'],
+    ['on 300 tasks', '300 K', 'en', '300 K'],
   ] as const)('rejects %j -> %j', (source, generated, locale, unsupported) => {
     expect(findUnsupportedNumbers(generated, source, locale)).toEqual([unsupported]);
   });
