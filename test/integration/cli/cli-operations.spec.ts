@@ -78,7 +78,7 @@ describe('operator CLI (PostgreSQL)', () => {
       outcome: 'OK',
       exitCode: 0,
       issueStatus: 'READY',
-      template: 'issue-print-v2',
+      template: 'issue-print-v3',
       claudeCalls: 0,
       published: { verifiedUnchanged: true },
     });

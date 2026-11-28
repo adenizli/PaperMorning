@@ -90,7 +90,7 @@ const REPORTED =
 
 describe('article-v2 evidence grounding (first issue regression: 9 of 10 combinations)', () => {
   it('is a new prompt/schema version, so article-v1 variants are never reused', () => {
-    expect(ARTICLE_PROMPT_VERSION).toBe('article-v2');
+    expect(ARTICLE_PROMPT_VERSION).toBe('article-v3');
     expect(ARTICLE_SCHEMA_VERSION).toBe(2);
   });
 
@@ -202,6 +202,128 @@ describe('analysis validation catches the same error for newly written analyses'
         true,
       ),
     ).not.toThrow();
+  });
+});
+
+describe('article-v3 / outlook-v3: scope of absence for abstract-only sources', () => {
+  const PUBLISHED = 'Simülasyondan gerçek robota aktarım bu çalışmada ele alınmıyor.';
+  const CORRECT = 'Simülasyondan gerçek robota aktarım özette ele alınmıyor.';
+  const withLimits = (body: string) => {
+    const data = cannedArticle('Öğrenilen artık model drone uçuşunu iyileştiriyor');
+    (data.sections as { key: string; body: string }[]).find((s) => s.key === 'limits')!.body = body;
+    return data;
+  };
+
+  it('instructs the distinction with the published sentence as the counter-example', () => {
+    expect(ARTICLE_PROMPT_VERSION).toBe('article-v3');
+    expect(ARTICLE_SYSTEM_PROMPT).toContain(`"${PUBLISHED}" yanlış`);
+    expect(ARTICLE_SYSTEM_PROMPT).toContain(`"${CORRECT}" doğru`);
+    expect(ARTICLE_SYSTEM_PROMPT).toContain('Hipotez');
+    expect(OUTLOOK_PROMPT_VERSION).toBe('outlook-v3');
+    expect(OUTLOOK_SYSTEM_PROMPT).toContain('özette ele alınmıyor');
+  });
+
+  it('rejects the published sentence for an abstract-only article, accepts the corrected one', () => {
+    expect(() => validateArticle(withLimits(PUBLISHED), groundingSourcesOf(view()))).toThrow(
+      `Article output invalid: absence in the abstract stated as absence in the study (write "özette ..."): "${PUBLISHED}"`,
+    );
+    expect(() => validateArticle(withLimits(CORRECT), groundingSourcesOf(view()))).not.toThrow();
+  });
+
+  it('also checks the "not reported" list, and the error stays retryable', () => {
+    try {
+      validateArticle(
+        { ...withLimits(CORRECT), notReported: ['Yazarlar gerçek robotta test etmiyor.'] },
+        groundingSourcesOf(view()),
+      );
+      throw new Error('expected a validation error');
+    } catch (error) {
+      expect(error).toBeInstanceOf(PublicationError);
+      expect((error as PublicationError).kind).toBe('VALIDATION_FAILED');
+      expect((error as PublicationError).retryable).toBe(true);
+    }
+  });
+
+  it('does not apply when the full text was read', () => {
+    const fullText = groundingSourcesOf(view({ coverage: ContentCoverage.FULL_TEXT }));
+    expect(fullText.abstractOnly).toBe(false);
+    expect(() => validateArticle(withLimits(PUBLISHED), fullText)).not.toThrow();
+  });
+
+  it('keeps numeric and unreported-combination checks in force alongside it', () => {
+    expect(() =>
+      validateArticle(withLimits(`${CORRECT} Hata %73 azaldı.`), groundingSourcesOf(view())),
+    ).toThrow(/numbers not present/);
+    expect(() =>
+      validateArticle(
+        withLimits(`${CORRECT} ${NINE_OF_TEN_UNSUPPORTED_TR}`),
+        groundingSourcesOf(view()),
+      ),
+    ).toThrow(/9\/10 reported/);
+  });
+
+  const meta = { fingerprint: 'f'.repeat(64), model: 'claude-sonnet-5-5' };
+  const papers = (n: number): OutlookPaper[] =>
+    Array.from({ length: n }, (_, i) => ({
+      paperKey: `P${i + 1}`,
+      view: view({ analysisId: `an-${i + 1}` }),
+    }));
+
+  it('outlook: rejects study-scope absence for abstract-only papers', () => {
+    const base = cannedOutlook(['P1']);
+    expect(() =>
+      validateOutlook(
+        { ...base, development: { ...(base.development as object), uncertainties: [PUBLISHED] } },
+        papers(1),
+        meta,
+      ),
+    ).toThrow(/absence in an abstract stated as absence in the study/);
+    expect(() =>
+      validateOutlook(
+        { ...base, development: { ...(base.development as object), uncertainties: [CORRECT] } },
+        papers(1),
+        meta,
+      ),
+    ).not.toThrow();
+  });
+
+  it('outlook: a cross-study report must relate the papers or say why it cannot', () => {
+    const base = cannedOutlook(['P1', 'P2', 'P3']);
+    expect(() => validateOutlook({ ...base, contrasts: [] }, papers(3), meta)).toThrow(
+      /cross-study report needs a relationship, agreement or disagreement/,
+    );
+    // A "contrast" citing a single paper is not one.
+    expect(() =>
+      validateOutlook(
+        { ...base, contrasts: [{ statement: 'Ayrışma: tek kaynak.', paperKeys: ['P1'] }] },
+        papers(3),
+        meta,
+      ),
+    ).toThrow(/cross-study report needs/);
+    const honest = validateOutlook(
+      {
+        ...base,
+        contrasts: [],
+        insufficientEvidence: {
+          academic: null,
+          industry: null,
+          synthesis:
+            'Bu sayıdaki çalışmalar farklı sorunlara odaklandığı için ortak sonuç kurulamadı.',
+        },
+      },
+      papers(3),
+      meta,
+    );
+    expect(honest.mode).toBe('CROSS_STUDY');
+    expect(validateOutlook(base, papers(3), meta).contrasts).toEqual([
+      expect.objectContaining({ paperKeys: ['P1', 'P2'] }),
+    ]);
+  });
+
+  it('outlook-v3 asks for relationships, agreements, disagreements and gaps without consensus', () => {
+    for (const phrase of ['"İlişki:"', '"Uyuşma:"', '"Ayrışma:"', '"Boşluk:"', 'Uzlaşı uydurma']) {
+      expect(OUTLOOK_SYSTEM_PROMPT).toContain(phrase);
+    }
   });
 });
 
@@ -405,7 +527,7 @@ describe('outlook-v2: single-study vs cross-study', () => {
   const claim = (statement: string, paperKeys: string[]) => ({ statement, paperKeys });
 
   it('is a new prompt/schema version with explicit single and multi-paper instructions', () => {
-    expect(OUTLOOK_PROMPT_VERSION).toBe('outlook-v2');
+    expect(OUTLOOK_PROMPT_VERSION).toBe('outlook-v3');
     expect(OUTLOOK_SCHEMA_VERSION).toBe(2);
     expect(OUTLOOK_SYSTEM_PROMPT).toContain('MOD: TEK_ÇALIŞMA');
     expect(OUTLOOK_SYSTEM_PROMPT).toContain('MOD: ÇOKLU_ÇALIŞMA');

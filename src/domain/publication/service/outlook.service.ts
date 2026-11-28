@@ -3,7 +3,10 @@ import { ContentCoverage } from '../../../common/enum/research.enum';
 import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
 import { AppConfig } from '../../../config/app.config';
 import { fingerprint } from '../../../common/text/fingerprint';
-import { findAbsenceInferences } from '../../../common/text/evidence-grounding';
+import {
+  findAbsenceInferences,
+  findStudyScopeAbsenceClaims,
+} from '../../../common/text/evidence-grounding';
 import {
   describeUnsupportedClaims,
   findUnsupportedNumericClaims,
@@ -34,8 +37,12 @@ import { PublicationError } from './publication-error';
  * outlook-v2 (2026-11-27): separate single-study / cross-study instructions, evidence-grounding
  * rules, `contrasts`, and per-mode item limits. Part of the fingerprint, so v1 reports are never
  * reused for new issues; reports frozen into published issues are untouched.
+ *
+ * outlook-v3 (2026-11-28): scope of absence for abstract-only sources ("özette ele alınmıyor"),
+ * and explicit cross-study duties: relationships, agreements and disagreements as labelled
+ * contrasts, research gaps, no fabricated consensus. Schema unchanged.
  */
-export const OUTLOOK_PROMPT_VERSION = 'outlook-v2';
+export const OUTLOOK_PROMPT_VERSION = 'outlook-v3';
 export const OUTLOOK_SCHEMA_VERSION = 2;
 export const OUTLOOK_TITLE = 'Ufuk Raporu — Araştırma ve Uygulama Fırsatları';
 const MATURITIES: OutlookMaturity[] = ['RESEARCH', 'EARLY_PROTOTYPE', 'FIELD_TESTED'];
@@ -189,6 +196,7 @@ Kanıt kuralları:
 - Bildirilmeyen veriden sonuç çıkarma: kaynak "on kombinasyonun dokuzunda iyileşme" diyorsa onuncu hakkında hiçbir şey bilinmez; "onuncuda iyileşme yok" yazma, "kalan bir kombinasyonun sonucu belirtilmiyor" de.
 - Karşılaştırma tabanı, örneklem, veri kümesi veya deney koşulları belirtilmemişse karşılaştırmaları nitele ve genelleme yapma. Ön baskı ve yalnızca özete dayanan analizlerde kesinlik düzeyini düşür ve bunu belirsizlikler arasında an.
 - Analizlerde ve özetlerde geçmeyen hiçbir sayıyı yazma.
+- Kapsam: coverage "ABSTRACT_ONLY" olan bir çalışmanın yalnızca özetini biliyorsun. Özette geçmeyen bir konu makalede olmadığı anlamına gelmez: "bu çalışmada ele alınmıyor", "yazarlar test etmiyor" YAZMA; "özette ele alınmıyor", "özette belirtilmiyor" yaz.
 - Akademik fırsat: açık kalan soru, test edilebilir hipotez, düşük maliyetli ilk deney ve ölçülecek metrikler. "Yayınlanabilir/özgün" iddiasında bulunma.
 - Sektörel fırsat: hangi ihtiyacı karşıladığı, küçük bir pilot, ölçülecek metrikler, engeller (maliyet, ölçek, regülasyon, veri, güvenlik) ve olgunluk (RESEARCH / EARLY_PROTOTYPE / FIELD_TESTED). "Kesin büyüyecek", "kesin kazandırır" gibi ifadeler yasak.
 - Kanıt yetersizse fırsat uydurma: ilgili dizi boş kalsın ve insufficientEvidence alanında nedenini açıkla. Aksi halde bu alanlar null olsun.
@@ -201,8 +209,11 @@ MOD: TEK_ÇALIŞMA (sayıda yalnızca bir çalışma varsa):
 - En fazla ${single.evidence} evidence, ${single.inferences} inferences, ${single.academic} akademik ve ${single.industry} sektörel fırsat, ${single.uncertainties} belirsizlik, ${single.falsifiers} çürütme koşulu; her listede en fazla ${single.listItems} madde. Çok sayıda spekülatif fikir yerine az sayıda, kanıta dayanan, test edilebilir fırsat seç. contrasts boş dizi olsun.
 
 MOD: ÇOKLU_ÇALIŞMA (iki veya daha fazla çalışma):
-- synthesis çalışmaları birlikte okur ve en az iki paperKey'e dayanır.
-- contrasts: çalışmaların uyuştuğu ve ayrıştığı noktalar; her madde en az iki paperKey'e dayanır. Ortak bir sonuç yoksa bunu söyle; zorla eğilim kurma.
+- Amaç çalışmaları birbirine bağlamaktır; her çalışmayı sırayla yeniden özetleme. evidence yalnızca karşılaştırma için gereken bulgulardır.
+- synthesis çalışmaları birlikte okur, aralarındaki ilişkiyi söyler (aynı sorunu farklı yöntemlerle mi ele alıyorlar, biri diğerinin eksiğini mi tamamlıyor, farklı koşullarda mı denenmişler) ve en az iki paperKey'e dayanır.
+- contrasts: her madde "İlişki:", "Uyuşma:" ya da "Ayrışma:" ile başlar ve en az iki paperKey'e dayanır. "Uyuşma" yalnızca çalışmalar gerçekten aynı şeyi bildiriyorsa yazılır; veri kümesi, ölçüt veya koşullar farklıysa bunu belirt. Ortak bir sonuç yoksa yalnızca ilişki ve ayrışmaları yaz ve insufficientEvidence.synthesis içinde ortak sonuç kurulamadığını açıkla.
+- Araştırma boşlukları: hiçbir özette yanıtlanmayan önemli soruları development.uncertainties içinde "Boşluk:" ile başlayarak yaz ("... hiçbir özette ele alınmıyor"; "hiçbir çalışma yapmadı" değil).
+- Uzlaşı uydurma: bu sayıdaki birkaç çalışma alanın genel uzlaşısını veya eğilimini kanıtlamaz. "Alan ... konusunda uzlaştı", "literatür gösteriyor" yazma; kapsamı belirt ("bu sayıdaki iki çalışma ...").
 - Fırsatlarda mümkün olduğunca birden fazla kaynağın desteklediği fikirleri öne çıkar.
 - En fazla ${cross.evidence} evidence, ${cross.inferences} inferences, ${cross.contrasts} contrasts, ${cross.academic} akademik ve ${cross.industry} sektörel fırsat; her listede en fazla ${cross.listItems} madde.`;
 
@@ -488,6 +499,11 @@ export function validateOutlook(
       .filter((c) => c.paperKeys.length >= 2),
     seen,
   );
+  if (mode === 'CROSS_STUDY' && contrasts.length === 0 && !insufficientEvidence.synthesis) {
+    fail(
+      'a cross-study report needs a relationship, agreement or disagreement citing two papers, or a stated reason in insufficientEvidence.synthesis',
+    );
+  }
   const report: OutlookReportModel = {
     fingerprint: meta.fingerprint,
     title: OUTLOOK_TITLE,
@@ -543,6 +559,14 @@ export function validateOutlook(
     fail(
       `conclusion drawn from data the sources do not report (${absence[0].partition} reported): "${absence[0].sentence.slice(0, 200)}"`,
     );
+  }
+  if (papers.some((p) => p.view.coverage === ContentCoverage.ABSTRACT_ONLY)) {
+    const [overreach] = findStudyScopeAbsenceClaims(outlookTexts(report));
+    if (overreach) {
+      fail(
+        `absence in an abstract stated as absence in the study (write "özette ..."): "${overreach.slice(0, 200)}"`,
+      );
+    }
   }
   return report;
 }

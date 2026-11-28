@@ -239,3 +239,96 @@ export function findAbsenceInferences(generated: string[], source: string): Abse
   }
   return findings;
 }
+
+/**
+ * Absence in the abstract is not absence in the paper. When only the abstract was read, a
+ * sentence must not say that the STUDY does not do something ("Simülasyondan gerçek robota
+ * aktarım bu çalışmada ele alınmıyor"); it may only say the ABSTRACT does not mention it
+ * ("... özette ele alınmıyor").
+ *
+ * Deliberately narrow (Turkish output, lower-cased with Turkish rules):
+ * - flagged: a negated study activity ("ele alınmıyor", "test edilmemiş", "incelenmiyor",
+ *   "karşılaştırmıyor", "yer almıyor", ...), or a negated reporting verb ("bildirmiyor",
+ *   "belirtilmiyor") whose subject is the study itself ("bu çalışmada", "makale", "yazarlar");
+ * - allowed: any sentence scoped to the abstract ("özet…"), attributed to the authors
+ *   ("yazarlar ... belirtiyor"), or explicitly uncertain ("bilinmiyor", "belirsiz").
+ * Epistemic verbs about evidence ("göstermiyor", "doğrulamıyor") are not flagged.
+ */
+const TR_LETTER = 'a-zçğıöşüâîû';
+const NEGATED =
+  '(?:m(?:ıyor|iyor|uyor|üyor|amış|emiş|amıştır|emiştir|adığı|ediği|adı|edi|amakta|emekte))';
+const ACTIVITY_STEMS = [
+  'ele alın',
+  'ele al',
+  'yer al',
+  'incelen',
+  'incele',
+  'irdelen',
+  'irdele',
+  'test edil',
+  'test et',
+  'sınan',
+  'sına',
+  'denen',
+  'dene',
+  'değerlendiril',
+  'değerlendir',
+  'karşılaştırıl',
+  'karşılaştır',
+  'ölçül',
+  'ölç',
+  'tartışıl',
+  'tartış',
+  'araştırıl',
+  'araştır',
+  'uygulan',
+  'uygula',
+  'doğrulan',
+  'sunul',
+  'sun',
+  'içer',
+  'kapsan',
+  'kapsa',
+  'analiz edil',
+  'analiz et',
+  'simüle edil',
+  'simüle et',
+  'yapıl',
+  'gerçekleştiril',
+];
+const REPORTING_STEMS = [
+  'bildiril',
+  'bildir',
+  'belirtil',
+  'belirt',
+  'raporlan',
+  'raporla',
+  'açıklan',
+];
+const stems = (list: string[]) => list.map((s) => s.replace(/ /g, '\\s+')).join('|');
+const STUDY_ACTIVITY_NEGATED = new RegExp(
+  `(?<![${TR_LETTER}])(?:${stems(ACTIVITY_STEMS)})${NEGATED}`,
+);
+const REPORTING_NEGATED = new RegExp(`(?<![${TR_LETTER}])(?:${stems(REPORTING_STEMS)})${NEGATED}`);
+const STUDY_SUBJECT = new RegExp(`(?<![${TR_LETTER}])(?:çalışma|makale|araştırma|yazar)`);
+const ABSTRACT_SCOPE = /özet|abstract/;
+const ATTRIBUTION = new RegExp(
+  `(?<![${TR_LETTER}])(?:belirt|bildir|vurgula|ifade\\s+ed|not\\s+ed|kabul\\s+ed|aktar|söyl)(?:iyor|ıyor|uyor|üyor|mekte|makta|ir|ır|ur|ür|di|dı|du|dü|miş|mış)`,
+);
+const EXPLICIT_UNCERTAINTY =
+  /bilinmiyor|bilinmemektedir|belirsiz|net değil|açık değil|anlaşılmıyor/;
+
+/** Sentences that turn "not in the abstract" into "not in the study" (abstract-only sources). */
+export function findStudyScopeAbsenceClaims(generated: string[]): string[] {
+  const claims: string[] = [];
+  for (const text of generated) {
+    for (const sentence of splitSentences(text)) {
+      const s = sentence.toLocaleLowerCase('tr');
+      if (ABSTRACT_SCOPE.test(s) || ATTRIBUTION.test(s) || EXPLICIT_UNCERTAINTY.test(s)) continue;
+      if (STUDY_ACTIVITY_NEGATED.test(s) || (REPORTING_NEGATED.test(s) && STUDY_SUBJECT.test(s))) {
+        claims.push(sentence);
+      }
+    }
+  }
+  return claims;
+}

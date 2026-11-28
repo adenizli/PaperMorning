@@ -63,6 +63,16 @@ export function cannedOutlook(
     inferences: [
       { statement: 'Bu eğilim farklı görevlerde de geçerli olabilir.', paperKeys: keys },
     ],
+    contrasts:
+      keys.length >= 2
+        ? [
+            {
+              statement:
+                'İlişki: Çalışmalar aynı verimlilik sorununu farklı yöntemlerle ele alıyor.',
+              paperKeys: keys.slice(0, 2),
+            },
+          ]
+        : [],
     academicOpportunities: [
       {
         question: 'Kazanç farklı ortamlarda korunuyor mu?',

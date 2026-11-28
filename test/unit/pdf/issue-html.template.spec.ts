@@ -59,7 +59,7 @@ describe('renderIssueHtml', () => {
     expect(html).toContain('Bu sayıda yeterli kanıt yok.');
   });
 
-  describe('issue-print-v2 adaptive layout', () => {
+  describe('issue-print-v3 adaptive layout', () => {
     const single = () => {
       const content = issueContentFixture();
       content.articles = [content.articles[0]];
@@ -126,7 +126,7 @@ describe('renderIssueHtml', () => {
       content.outlook.mode = 'CROSS_STUDY';
       content.outlook.contrasts = [{ statement: 'İki çalışma uyuşuyor.', paperKeys: ['P1', 'P2'] }];
       const html = renderIssueHtml(content);
-      expect(html).toContain('Kaynakta belirtilmeyenler');
+      expect(html).toContain('Özette belirtilmeyenler');
       expect(html).toContain('Kalan bir kombinasyonun sonucu özette belirtilmiyor.');
       expect(html).toContain('Uyuşmalar ve ayrışmalar');
       const one = single();
@@ -134,7 +134,7 @@ describe('renderIssueHtml', () => {
       one.outlook.contrasts = [{ statement: 'Görünmemeli.', paperKeys: ['P1', 'P2'] }];
       const singleHtml = renderIssueHtml(one);
       expect(singleHtml).not.toContain('Uyuşmalar ve ayrışmalar');
-      expect(singleHtml).not.toContain('Kaynakta belirtilmeyenler');
+      expect(singleHtml).not.toContain('Özette belirtilmeyenler');
     });
 
     it('still renders v1 snapshots (no mode, no contrasts, no notReported)', () => {

@@ -3,7 +3,10 @@ import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
 import { AppConfig } from '../../../config/app.config';
 import { ContentCoverage, PublicationStatus } from '../../../common/enum/research.enum';
 import { fingerprint } from '../../../common/text/fingerprint';
-import { findAbsenceInferences } from '../../../common/text/evidence-grounding';
+import {
+  findAbsenceInferences,
+  findStudyScopeAbsenceClaims,
+} from '../../../common/text/evidence-grounding';
 import {
   describeUnsupportedClaims,
   findUnsupportedNumericClaims,
@@ -27,8 +30,13 @@ import { PublicationError } from './publication-error';
  * interpretation; no conclusions from unreported data; qualified comparisons) and the
  * `notReported` field. Bumping these changes every variant fingerprint, so variants written by
  * article-v1 are never reused for new issues; already published issues keep their frozen text.
+ *
+ * article-v3 (2026-11-28): scope of absence. With abstract-only coverage, something missing from
+ * the abstract is written as "özette ele alınmıyor", never "bu çalışmada ele alınmıyor"; hypotheses
+ * are marked as such. New fingerprints: v2 variants are not reused for new issues (papers are not
+ * repeated across a reader's issues, so this costs no extra writing in practice).
  */
-export const ARTICLE_PROMPT_VERSION = 'article-v2';
+export const ARTICLE_PROMPT_VERSION = 'article-v3';
 export const ARTICLE_SCHEMA_VERSION = 2;
 export const MAX_NOT_REPORTED = 4;
 
@@ -48,7 +56,9 @@ Kanıt kuralları (her şeyden önce gelir):
 - Okur her cümlenin hangi türden olduğunu anlayabilmelidir:
   1. Makalenin bildirdiği: kaynağa bağlanan ifadeler ("yazarlar ... bildiriyor", "çalışmaya göre ..."). Yazarların iddiasını "kanıtladı" diye değil "bildiriyor/gösterdiklerini belirtiyor" diye aktar.
   2. Bilinmeyen: kaynakta yer almayan bilgi. Tahmin etme; "özette belirtilmiyor" ya da "bilinmiyor" diye açıkça yaz.
-  3. PaperMorning'in yorumu: kaynakta olmayan çıkarım. Yalnızca "whyItMatters" ve "limits" içinde, "olabilir", "PaperMorning'in yorumu" gibi açık bir işaretle yaz; asla bulgu gibi sunma.
+  3. Hipotez: test edilmemiş bir olasılık. "hipotez", "test edilmesi gereken bir olasılık" diye işaretle; sonuç gibi yazma.
+  4. PaperMorning'in yorumu: kaynakta olmayan çıkarım. Yalnızca "whyItMatters" ve "limits" içinde, "olabilir", "PaperMorning'in yorumu" gibi açık bir işaretle yaz; asla bulgu gibi sunma.
+- Kapsam: "Analizin kapsamı: YALNIZCA ÖZET" ise yalnızca özeti biliyorsun. Özette geçmeyen bir konu, makalede de olmadığı anlamına gelmez. "Bu çalışmada ele alınmıyor", "makale ... içermiyor", "yazarlar ... test etmiyor" YAZMA; doğrusu "özette ele alınmıyor", "özette belirtilmiyor", "özette yer almıyor". Örnek: "Simülasyondan gerçek robota aktarım bu çalışmada ele alınmıyor." yanlış; "Simülasyondan gerçek robota aktarım özette ele alınmıyor." doğru. Yalnızca tam metin okunduysa "makalede" diyebilirsin.
 - Bildirilmeyen veriden sonuç çıkarma. Kaynak bir alt küme için sonuç veriyorsa geri kalan durumlar hakkında hiçbir şey söylemez. Örnek: Özet "on kombinasyonun dokuzunda konum RMSE'si %15–60 azaldı" diyorsa "onuncu kombinasyonda iyileşme olmadı", "biri başarısız oldu" ya da "yöntem bir durumda işe yaramadı" YAZMA. Doğrusu: "Kalan bir kombinasyonun sonucu özette belirtilmiyor."
 - Karşılaştırma tabanı, örneklem veya deney sayısı, veri kümesi ya da deney koşulları kaynakta tanımlanmamışsa karşılaştırmayı niteleyerek yaz ("özette belirtilen koşullarda", "neyle karşılaştırıldığı özette tanımlanmıyor") ve genelleme yapma.
 - Sayı aralıklarını olduğu gibi aktar (ör. %15–60). Aralığı en iyi değere indirgeme ("%60'a varan iyileşme" gibi seçici ifadeler kullanma).
@@ -58,7 +68,7 @@ Kanıt kuralları (her şeyden önce gelir):
 
 Yazım:
 - Beş bölümü sırasıyla yaz: problem (Araştırmacılar hangi sorunu çözmeye çalıştı?), before (Önceki yaklaşımların güçlü ve zayıf yanları; kaynak anlatmıyorsa bunu söyle), new (Bu çalışmanın özgün katkısı), evidence (Ne yaptılar, neyi neyle karşılaştırdılar, ne bildirdiler?), limits (Hangi koşullarda geçerli, neler bilinmiyor?).
-- notReported: okurun doğal olarak soracağı ama kaynakta yanıtı olmayan en fazla ${MAX_NOT_REPORTED} kısa madde (ör. karşılaştırma tabanının ayrıntısı, deney sayısı, kalan durumların sonucu). Her madde bilinmeyeni adlandırsın ("... özette belirtilmiyor"); yanıt veya tahmin içermesin. Böyle bir nokta yoksa boş dizi ver.
+- notReported: okurun doğal olarak soracağı ama kaynakta yanıtı olmayan en fazla ${MAX_NOT_REPORTED} kısa madde (ör. karşılaştırma tabanının ayrıntısı, deney sayısı, kalan durumların sonucu). Her madde bilinmeyeni adlandırsın ("... özette belirtilmiyor"; tam metin okunduysa "... makalede belirtilmiyor"); yanıt veya tahmin içermesin. Böyle bir nokta yoksa boş dizi ver.
 - Aynı bulguyu bölümler arasında tekrar etme. Kısa ve yoğun paragraflar yaz; uzunluğu kaynağın içeriğiyle orantılı tut.
 - Başlık ilgi çekici ama bilimsel olarak savunulabilir olsun.`;
 
@@ -251,16 +261,18 @@ export class ArticleWritingService {
  * abstract when the analysis itself was written from the abstract only (the analysis is derived
  * text and must not license claims the abstract does not make).
  */
-export function groundingSourcesOf(view: ResearchPaperView): {
-  numbers: string;
-  statements: string;
-} {
+export function groundingSourcesOf(view: ResearchPaperView): GroundingSources {
   const primary = `${view.title}\n${view.abstract ?? ''}`;
   const numbers = `${primary}\n${JSON.stringify(view.analysis)}`;
-  return {
-    numbers,
-    statements: view.coverage === ContentCoverage.ABSTRACT_ONLY ? primary : numbers,
-  };
+  const abstractOnly = view.coverage === ContentCoverage.ABSTRACT_ONLY;
+  return { numbers, statements: abstractOnly ? primary : numbers, abstractOnly };
+}
+
+export interface GroundingSources {
+  numbers: string;
+  statements: string;
+  /** Only the abstract was read: "not in the abstract" must never become "not in the study". */
+  abstractOnly?: boolean;
 }
 
 export function buildArticlePrompt(view: ResearchPaperView, level: KnowledgeLevel): string {
@@ -288,7 +300,7 @@ export function buildArticlePrompt(view: ResearchPaperView, level: KnowledgeLeve
 
 export function validateArticle(
   data: unknown,
-  sources: { numbers: string; statements: string },
+  sources: GroundingSources,
   language = 'tr',
 ): ArticleContent {
   const fail = (message: string): never => {
@@ -342,6 +354,14 @@ export function validateArticle(
     fail(
       `conclusion drawn from data the source does not report (${absence[0].partition} reported): "${absence[0].sentence.slice(0, 200)}"`,
     );
+  }
+  if (sources.abstractOnly) {
+    const [overreach] = findStudyScopeAbsenceClaims(articleTexts(content));
+    if (overreach) {
+      fail(
+        `absence in the abstract stated as absence in the study (write "özette ..."): "${overreach.slice(0, 200)}"`,
+      );
+    }
   }
   return content;
 }

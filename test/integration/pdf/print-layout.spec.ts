@@ -9,11 +9,11 @@ import { testConfig } from '../../support/test-config';
 jest.setTimeout(180_000);
 
 /**
- * issue-print-v2 on real Chromium: page counts, bookmarks, links and Turkish text for one-, two-
+ * issue-print-v3 on real Chromium: page counts, bookmarks, links and Turkish text for one-, two-
  * and multi-paper issues. Set PM_PRINT_QA_DIR to also keep each PDF and per-page PNGs for visual
  * inspection.
  */
-describe('print layout (real Chromium, issue-print-v2)', () => {
+describe('print layout (real Chromium, issue-print-v3)', () => {
   const service = new PdfService(testConfig());
   const qaDir = process.env.PM_PRINT_QA_DIR;
 
@@ -78,7 +78,7 @@ describe('print layout (real Chromium, issue-print-v2)', () => {
     const used = [...new Set(JSON.stringify(content).match(/[çğıöşüÇĞİÖŞÜ]/g))];
     expect(used.length).toBeGreaterThanOrEqual(10);
     for (const letter of used) expect(text).toContain(letter);
-    expect(text).toContain('Kaynakta belirtilmeyenler'.toLocaleUpperCase('tr-TR'));
+    expect(text).toContain('Özette belirtilmeyenler'.toLocaleUpperCase('tr-TR'));
     expect(text).toContain('Bu çalışmanın değerlendirmesi');
     // Bookmarks: brand > [headline > sections, report > subsections]; no duplicates per level.
     expect(doc.outline.map((n) => n.title)).toEqual(['PaperMorning']);

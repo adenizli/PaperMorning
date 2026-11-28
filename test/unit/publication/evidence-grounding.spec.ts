@@ -1,6 +1,7 @@
 import {
   extractPartitions,
   findAbsenceInferences,
+  findStudyScopeAbsenceClaims,
   splitSentences,
 } from '../../../src/common/text/evidence-grounding';
 import { NINE_OF_TEN_ABSTRACT } from '../../fixtures/nine-of-ten.fixture';
@@ -65,5 +66,48 @@ describe('evidence grounding: no conclusions from unreported data', () => {
       '10. kombinasyonda 0.5 puan düştü.',
       'Sonra durdu.',
     ]);
+  });
+});
+
+describe('abstract-only scope: absence in the abstract is not absence in the study', () => {
+  // The sentence from the 2026-11-28 issue, and its correct form.
+  const PUBLISHED = 'Simülasyondan gerçek robota aktarım bu çalışmada ele alınmıyor.';
+  const CORRECT = 'Simülasyondan gerçek robota aktarım özette ele alınmıyor.';
+
+  it.each([
+    PUBLISHED,
+    'Simülasyondan gerçek robota aktarım ele alınmıyor.',
+    'Yazarlar yöntemi gerçek bir robotta test etmiyor.',
+    'Makale gerçek dünya deneyleri içermiyor.',
+    'Yöntem gerçek donanımda doğrulanmamış.',
+    'Gerçek robot deneyi yapılmamış.',
+    'Farklı tutucularla karşılaştırma yapılmıyor.',
+    'Uzun süreli kullanım incelenmiyor.',
+    'Çalışma hesaplama maliyetini bildirmiyor.',
+    'İnsanlarla etkileşim çalışmada değerlendirilmiyor.',
+  ])('flags %j', (sentence) => {
+    expect(findStudyScopeAbsenceClaims([sentence])).toEqual([sentence]);
+  });
+
+  it.each([
+    CORRECT,
+    'Gerçek robot deneyleri özette yer almıyor.',
+    'Özete göre yöntem gerçek donanımda test edilmemiş.',
+    'Yazarlar gerçek robotta test etmediklerini belirtiyor.',
+    'Gerçek robotta test edilip edilmediği bilinmiyor.',
+    'Hesaplama maliyeti belirtilmiyor.', // reporting verb without the study as subject
+    'Kalan bir kombinasyonun sonucu özette belirtilmiyor.',
+    'Sonuçlar, yöntemin her koşulda çalıştığını göstermiyor.', // epistemic, about evidence
+    'Bu bulgu genellemeyi doğrulamıyor.',
+    'Yöntem etiketli veri gerektirmiyor.',
+    'Yazarlar başarı oranında belirgin bir artış bildiriyor.',
+  ])('allows %j', (sentence) => {
+    expect(findStudyScopeAbsenceClaims([sentence])).toEqual([]);
+  });
+
+  it('checks every sentence of a paragraph and returns only the offending one', () => {
+    expect(
+      findStudyScopeAbsenceClaims([`Yazarlar %35 tasarruf bildiriyor. ${PUBLISHED} ${CORRECT}`]),
+    ).toEqual([PUBLISHED]);
   });
 });
