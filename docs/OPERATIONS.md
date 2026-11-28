@@ -183,3 +183,35 @@ Zamanlayıcı yalnızca tek sunucu sürecinde çalışır; CLI süreçleri hiçb
 - `publication:prepare` → `exit=1`, `retry.errorKind=NOT_CONFIGURED` → `ANTHROPIC_API_KEY` eksik.
 - `exit=1`, `retry.errorKind=BUDGET_EXCEEDED` → günlük bütçe (`LLM_DAILY_BUDGET_USD`, UTC günü) doldu; `llm:usage`.
 - PDF yer imleri (bookmark) aynı başlığı iki kez gösteriyorsa: Linux'taki Chromium, sayfaya taşınan başlıkları yer imi başlığında tekrarlar. Renderer bunu bayt güvenli biçimde onarır (`src/service/pdf/pdf-outline.ts`); eski şablonla üretilmiş yayımlanmış PDF'ler değiştirilmez.
+
+## 10. Doğrulama hatasından (`VALIDATION_FAILED`) sonra devam
+
+Sayısal denetim (`src/common/text/numeric-claims.ts`) sayıları **değerle** karşılaştırır: kaynaktaki "Thirty-two" çıktıdaki "32"yi, "470,000" Türkçe "470.000" ve "470 bin"i karşılar; "470" tek başına, "33", "1.200" (kaynak "1.2") veya "%75" (kaynak "%15–60") yine reddedilir. Hata mesajı alanı ve yakın metni gösterir: `numbers not present in the analysis/abstract: 470 [sections[evidence].body: "…470 deneme koşusunu…"]`.
+
+Bu yalnızca doğrulama kodudur; prompt ve şema sürümleri (analiz, `article-v2`, `outlook-v2`) **değişmedi**, bu yüzden parmak izleri aynıdır ve başarısız kayıtlar aynı satırda yeniden denenir. Elle veritabanı değişikliği, checkpoint sıfırlama veya kayıt silme gerekmez ve yapılmamalıdır.
+
+- **Yazı varyantı** (`article_variant`, `FAILED`, `retryable=true`): bir sonraki hazırlıkta aynı satır yeniden talep edilir, koşul `attempt_count < 3`. Reddedilen çıktı saklanmadığı için bu **bir** yeni Claude yazı çağrısıdır; tamamlanmış diğer varyantlar, analizler ve seçim yeniden ödenmez.
+- **Sayı çalıştırması** (`publication_run`): `WRITING` checkpoint'inden devam eder, `checkpoint.selection` korunur. Koşul: `attempt_count < PUBLICATION_MAX_ATTEMPTS` (varsayılan 5) ve `next_attempt_at` geçmiş olmalı (geri çekilme `10 dk × 2^(deneme−1)`).
+- **Analiz** (`paper_analysis`, `FAILED`): aynı satırda `attempt_count < 3` iken, makaleyi aday olarak yeniden içeren sonraki bir `research:run` tarafından denenir. Aynı tarih için tamamlanmış bir araştırma çalıştırması tekrar çalışmaz.
+
+Deploy'dan sonra, hiçbir şey değiştirmeden durumu okuyun:
+
+```bash
+docker compose exec -T server node dist/bootstrap/cli.js publication:status --user <u> --date 2026-11-28 | jq .
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
+  SELECT issue_date, status, stage, attempt_count, retryable, next_attempt_at, error_kind, left(error_message, 200) AS error
+    FROM publication_run WHERE issue_date = '"'"'2026-11-28'"'"';
+  SELECT id, status, attempt_count, retryable, prompt_version, error_kind, left(error_message, 200) AS error
+    FROM article_variant WHERE status <> '"'"'COMPLETED'"'"' ORDER BY updated_at DESC LIMIT 10;
+  SELECT id, status, attempt_count, retryable, error_kind, left(error_message, 200) AS error
+    FROM paper_analysis WHERE status = '"'"'FAILED'"'"' ORDER BY updated_at DESC LIMIT 10;"'
+```
+
+Karar:
+
+| Durum | Yapılacak |
+|---|---|
+| Çalıştırma `attempt_count < 5`, varyant `attempt_count < 3`, `retryable=true` | `publication:status` `PREPARE` diyorsa (veya `WAIT` ise `at` zamanından sonra) `publication:prepare --user <u> --date 2026-11-28`. Beklenen: `READY`, `retry` yok; çalıştırmanın `attempt_count`'u bir artar, varyant satırı aynı kalır (`attempt_count` +1, `COMPLETED`). |
+| Varyant `attempt_count = 3` (deneme hakkı bitti) | Çalıştırma her denemede aynı hatayla `WRITING`'de başarısız olur ve çalıştırma hakkını tüketir: **`publication:prepare` çalıştırmayın.** Aynı makale aynı düzey için seçildiği sürece sonraki tarihler de etkilenir. Elle SQL ile sıfırlamayın; operatör kararı gerekir (ayrı, denetimli bir değişiklik). |
+| `publication:status` `MANUAL` | Çalıştırma hakkı bitmiş veya hata kalıcı: tarihi yeniden üretmeyin, yeni sayı yeni tarihtir (bkz. §0). |
+
