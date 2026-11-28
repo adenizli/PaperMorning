@@ -48,3 +48,19 @@ export function readerDay(
     pastCutoff: local > lateCutoff,
   };
 }
+
+/**
+ * The next instant (strictly after `now`) at which the reader's wall clock shows `hhmm`, using
+ * IANA rules: across a DST change the local time stays 08:00 and the UTC offset moves.
+ */
+export function nextLocalOccurrence(now: Date, timezone: string, hhmm: string): Date {
+  const local = DateTime.fromJSDate(now, { zone: 'utc' }).setZone(timezone);
+  if (!local.isValid) throw new Error(`Invalid timezone ${timezone}`);
+  const [hour, minute] = hhmm.split(':').map(Number);
+  const today = local.set({ hour, minute, second: 0, millisecond: 0 });
+  const next =
+    today > local
+      ? today
+      : local.plus({ days: 1 }).set({ hour, minute, second: 0, millisecond: 0 });
+  return next.toJSDate();
+}

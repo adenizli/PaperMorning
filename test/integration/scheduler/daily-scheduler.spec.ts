@@ -87,7 +87,7 @@ describe('DailyPublicationScheduler (simulated clock, PostgreSQL)', () => {
     expect(mail.sent).toHaveLength(0);
     await minute('2026-11-24T05:00:00Z'); // 08:00 Istanbul, 00:00 New York
     expect(sentTo('ist')).toHaveLength(1);
-    expect(sentTo('ist')[0].subject).toBe('PaperMorning | 2026-11-24');
+    expect(sentTo('ist')[0].subject).toMatch(/^PaperMorning · 24 Kasım 2026 — /);
     expect(sentTo('nyc')).toHaveLength(0);
 
     await minute('2026-11-24T11:00:00Z'); // 06:00 New York -> prepare
@@ -119,6 +119,96 @@ describe('DailyPublicationScheduler (simulated clock, PostgreSQL)', () => {
       (await issues()).filter((i: { user_id: string }) => i.user_id === istanbul),
     ).toHaveLength(1);
     expect(pdf.rendered).toHaveLength(1);
+  });
+
+  it('two server instances on one database: one issue, one render and one email per reader/day', async () => {
+    await app.close();
+    const storage = new InMemoryFileStorage(); // the shared /data volume
+    const otherMail = new FakeMailTransport();
+    const instance = (transport: FakeMailTransport) =>
+      createResearchApp({
+        anthropic: new FakeAnthropic(routingHandler()),
+        sources: { search: jest.fn().mockResolvedValue({ records: [], failures: [] }) },
+        pdf,
+        storage,
+        mail: transport,
+        keepData: true,
+        env: { RESEARCH_HAIKU_SCREENING: 'false' },
+      });
+    app = await instance(mail);
+    db = app.get(DataSource);
+    const other = await instance(otherMail);
+    try {
+      const [a, b] = [app, other].map((x) => x.get(DailyPublicationScheduler));
+      const both = (iso: string) =>
+        Promise.all([
+          a.runPreparation(T(iso)).then(() => a.runDelivery(T(iso))),
+          b.runPreparation(T(iso)).then(() => b.runDelivery(T(iso))),
+        ]);
+      await both('2026-11-24T03:00:00Z'); // 06:00 Istanbul: both instances tick
+      await both('2026-11-24T03:01:00Z');
+      await both('2026-11-24T05:00:00Z'); // 08:00 Istanbul
+      await both('2026-11-24T05:01:00Z');
+      const sent = [...mail.sent, ...otherMail.sent].filter((m) => m.to === 'ist@example.org');
+      expect(sent).toHaveLength(1);
+      expect((await issues()).filter((i) => i.user_id === istanbul)).toEqual([
+        expect.objectContaining({ issue_date: '2026-11-24', status: 'READY' }),
+      ]);
+      expect(pdf.rendered).toHaveLength(1);
+    } finally {
+      await other.close();
+    }
+  });
+
+  it('an exhausted LLM budget never reaches Claude and retries stay bounded', async () => {
+    await app.close();
+    const fake = new FakeAnthropic(routingHandler());
+    app = await createResearchApp({
+      anthropic: fake,
+      sources: { search: jest.fn().mockResolvedValue({ records: [], failures: [] }) },
+      pdf,
+      storage: new InMemoryFileStorage(),
+      mail,
+      keepData: true,
+      // Seeding today already spent more than this.
+      env: {
+        RESEARCH_HAIKU_SCREENING: 'false',
+        LLM_DAILY_BUDGET_USD: '0.000001',
+        PUBLICATION_MAX_ATTEMPTS: '2',
+      },
+    });
+    db = app.get(DataSource);
+    scheduler = app.get(DailyPublicationScheduler);
+    const run = async () =>
+      (
+        await db.query(
+          `SELECT attempt_count, status, error_kind, next_attempt_at FROM publication_run WHERE user_id = $1`,
+          [istanbul],
+        )
+      )[0] as { attempt_count: number; status: string; error_kind: string; next_attempt_at: Date };
+
+    await minute('2026-11-24T03:00:00Z');
+    expect(await run()).toMatchObject({
+      attempt_count: 1,
+      status: 'FAILED',
+      error_kind: 'BUDGET_EXCEEDED',
+    });
+    // Ticks inside the back-off window do nothing (no claim, no Claude request).
+    for (const iso of ['2026-11-24T03:01:00Z', '2026-11-24T03:02:00Z', '2026-11-24T04:00:00Z'])
+      await minute(iso);
+    expect((await run()).attempt_count).toBe(1);
+
+    // Back-off elapsed twice: the second attempt fails the same way, then attempts are exhausted.
+    for (let i = 0; i < 3; i++) {
+      await db.query(`UPDATE publication_run SET next_attempt_at = now() - interval '1 second'`);
+      await minute('2026-11-24T04:30:00Z');
+    }
+    expect((await run()).attempt_count).toBe(2);
+    expect(fake.calls).toHaveLength(0); // every attempt was refused before any provider request
+
+    await minute('2026-11-24T05:00:00Z'); // 08:00: nothing READY, nothing sent
+    expect(sentTo('ist')).toEqual([]);
+    expect((await issues()).filter((i) => i.user_id === istanbul)).toEqual([]);
   });
 
   it('prepares but never emails a reader who has not opted in', async () => {
@@ -160,7 +250,7 @@ describe('DailyPublicationScheduler (simulated clock, PostgreSQL)', () => {
     await db.query(`UPDATE publication_run SET next_attempt_at = now() - interval '1 second'`);
     await minute('2026-11-24T05:30:00Z'); // 08:30: ready late, still inside the window
     expect(sentTo('ist')).toHaveLength(2);
-    expect(sentTo('ist')[1].subject).toBe('PaperMorning | 2026-11-24');
+    expect(sentTo('ist')[1].subject).toMatch(/^PaperMorning · 24 Kasım 2026 — /);
   });
 
   it('stops automatic work after the late window; a manual run publishes for the web without emailing', async () => {

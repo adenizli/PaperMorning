@@ -83,7 +83,7 @@ describe('DeliveryService (PostgreSQL)', () => {
     const [message] = mail.sent;
     const [issue] = await db.query(`SELECT id, pdf_storage_key, content FROM issue`);
     expect(message.to).toBe('reader_a@example.org');
-    expect(message.subject).toBe(`PaperMorning | ${DATE}`);
+    expect(message.subject).toMatch(/^PaperMorning · 22 Kasım 2026 — \S/);
     expect(message.attachments).toHaveLength(1);
     expect(message.attachments[0]).toMatchObject({
       filename: `PaperMorning-${DATE}.pdf`,

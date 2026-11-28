@@ -13,7 +13,7 @@ const pdf = Buffer.concat([
 ]);
 const message = (): MailMessage => ({
   to: 'reader@example.org',
-  subject: 'PaperMorning | 2026-11-24',
+  subject: 'PaperMorning · 24 Kasım 2026 — Işığı ölçen robotlar: çğıöşü ÇĞİÖŞÜ',
   text: 'Merhaba — ğüşıöç\nKaynak: https://arxiv.org/abs/2611.00001',
   html: '<p>Merhaba — ğüşıöç</p><p>&lt;b&gt;escaped&lt;/b&gt;</p>',
   attachments: [
@@ -52,7 +52,10 @@ describe('MailService against a real local SMTP server', () => {
     });
 
     const [received] = sink.received;
-    expect(received.subject).toBe('PaperMorning | 2026-11-24');
+    // Turkish letters survive RFC 2047 header encoding unchanged.
+    expect(received.subject).toBe(
+      'PaperMorning · 24 Kasım 2026 — Işığı ölçen robotlar: çğıöşü ÇĞİÖŞÜ',
+    );
     expect(received.from?.value[0]).toMatchObject({
       name: 'PaperMorning',
       address: 'papermorning@example.org',

@@ -40,6 +40,30 @@ export class MailService implements MailTransport {
     return this.config.mail.enabled;
   }
 
+  /**
+   * Connectivity check without sending: TCP + TLS (implicit or STARTTLS, certificate verified) +
+   * AUTH, then QUIT. Works whenever SMTP_HOST is set, even with MAIL_ENABLED=false, so the
+   * operator can test credentials before enabling delivery. Never returns secrets.
+   */
+  async verify(): Promise<{ ok: true } | { ok: false; reason: string }> {
+    if (!this.config.mail.host) return { ok: false, reason: 'SMTP_HOST is not set' };
+    const transport = this.createTransport({ dataSent: false });
+    try {
+      await transport.verify();
+      return { ok: true };
+    } catch (error) {
+      const e = error as SmtpError;
+      return {
+        ok: false,
+        reason: this.sanitize(
+          `${e.code ?? 'ERROR'}${e.responseCode ? ` ${e.responseCode}` : ''}: ${e.message}`,
+        ),
+      };
+    } finally {
+      transport.close();
+    }
+  }
+
   async send(message: MailMessage): Promise<MailSendResult> {
     if (!this.isEnabled())
       return { status: 'REJECTED', permanent: false, reason: 'SMTP is not configured' };

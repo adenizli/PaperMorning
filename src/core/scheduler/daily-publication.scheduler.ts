@@ -5,7 +5,7 @@ import { PreferenceService } from '../../domain/account';
 import type { ReaderScheduleModel } from '../../domain/account';
 import { DeliveryService, DeliveryStatus, PublicationService } from '../../domain/publication';
 import type { DeliveryOutcome, PrepareOutcome } from '../../domain/publication';
-import { readerDay, ReaderDay } from './reader-clock';
+import { nextLocalOccurrence, readerDay, ReaderDay } from './reader-clock';
 
 export interface ScheduleEntry {
   userId: string;
@@ -15,6 +15,22 @@ export interface ScheduleEntry {
   dailyEmailEnabled: boolean;
   preparation: 'NOT_DUE' | 'NO_TOPICS' | PrepareOutcome | 'WOULD_PREPARE';
   delivery: 'NOT_DUE' | 'NOT_SUBSCRIBED' | 'MISSED_CUTOFF' | DeliveryOutcome | 'WOULD_SEND';
+}
+
+/** Read-only schedule of one reader at a given instant (ops:status). */
+export interface ReaderScheduleView {
+  userId: string;
+  timezone: string;
+  dailyEmailEnabled: boolean;
+  topicCount: number;
+  /** Reader-local date of "today" at that instant: the issue the scheduler works on. */
+  issueDate: string;
+  localTime: string;
+  /** Automatic preparation runs between these instants (06:00 local .. 08:00 + late window). */
+  preparationWindow: { from: string; until: string };
+  deliveryAt: string;
+  nextPreparationAt: string;
+  nextDeliveryAt: string;
 }
 
 /**
@@ -69,6 +85,33 @@ export class DailyPublicationScheduler {
     }
   }
 
+  /** Where every reader stands in their own day; pure computation, no side effects. */
+  async describeSchedules(now: Date): Promise<ReaderScheduleView[]> {
+    const { prepareLocalTime, deliveryLocalTime } = this.config.scheduler;
+    return (await this.preferences.listReaderSchedules()).map((reader) => {
+      const day = this.day(now, reader);
+      return {
+        userId: reader.userId,
+        timezone: reader.timezone,
+        dailyEmailEnabled: reader.dailyEmailEnabled,
+        topicCount: reader.topicCount,
+        issueDate: day.issueDate,
+        localTime: day.localTime,
+        preparationWindow: {
+          from: day.prepareAt.toISOString(),
+          until: day.lateCutoff.toISOString(),
+        },
+        deliveryAt: day.deliverAt.toISOString(),
+        nextPreparationAt: nextLocalOccurrence(
+          now,
+          reader.timezone,
+          prepareLocalTime,
+        ).toISOString(),
+        nextDeliveryAt: nextLocalOccurrence(now, reader.timezone, deliveryLocalTime).toISOString(),
+      };
+    });
+  }
+
   /** Prepares every reader whose local preparation time has passed today. */
   async runPreparation(now: Date, options: { dryRun?: boolean } = {}): Promise<ScheduleEntry[]> {
     const entries: ScheduleEntry[] = [];
@@ -114,9 +157,18 @@ export class DailyPublicationScheduler {
     try {
       const result = await this.publications.prepareIssue(reader.userId, day.issueDate);
       entry.preparation = result.outcome;
-      if (result.outcome === 'READY') this.settledToday.add(key);
+      if (result.outcome === 'READY') {
+        this.settledToday.add(key);
+        this.logger.log(`Issue ${reader.userId}/${day.issueDate} READY (${result.issue?.id})`);
+      }
       if (result.outcome === 'FAILED') {
-        this.logger.warn(`Issue ${reader.userId}/${day.issueDate} not prepared: ${result.reason}`);
+        const run = result.run;
+        const next = run?.nextAttemptAt
+          ? `next attempt after ${run.nextAttemptAt.toISOString()}`
+          : 'no automatic retry (operator: publication:status)';
+        this.logger.warn(
+          `Issue ${reader.userId}/${day.issueDate} not prepared (attempt ${run?.attemptCount ?? '?'}): ${result.reason}; ${next}`,
+        );
       }
     } catch (error) {
       entry.preparation = 'FAILED';
@@ -173,6 +225,9 @@ export class DailyPublicationScheduler {
       } else if (['SENT', 'ALREADY_SENT', 'UNKNOWN', 'NOT_OPTED_IN'].includes(result.outcome)) {
         // UNKNOWN is settled on purpose: it is never retried automatically.
         this.settledToday.add(key);
+        if (result.outcome === 'SENT') {
+          this.logger.log(`Delivery ${reader.userId}/${day.issueDate} SENT`);
+        }
       }
       if (result.outcome === 'UNKNOWN' || result.outcome === 'FAILED') {
         this.logger.warn(

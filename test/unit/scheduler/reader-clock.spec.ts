@@ -1,4 +1,4 @@
-import { readerDay } from '../../../src/core/scheduler/reader-clock';
+import { nextLocalOccurrence, readerDay } from '../../../src/core/scheduler/reader-clock';
 
 const settings = { prepareLocalTime: '06:00', deliveryLocalTime: '08:00', lateWindowMinutes: 120 };
 const at = (iso: string, tz: string) => readerDay(new Date(iso), tz, settings);
@@ -86,5 +86,60 @@ describe('readerDay (explicit instants, independent of the host timezone)', () =
 
   it('rejects invalid timezones instead of silently using server time', () => {
     expect(() => at('2026-11-24T05:00:00Z', 'Mars/Olympus')).toThrow(/Invalid timezone/);
+  });
+});
+
+describe('pilot target: Europe/Istanbul, prepare 06:00, deliver 08:00', () => {
+  const next = (iso: string, hhmm: string, tz = 'Europe/Istanbul') =>
+    nextLocalOccurrence(new Date(iso), tz, hhmm).toISOString();
+
+  it('next preparation and delivery are today before the times and tomorrow after them', () => {
+    // 02:59 Istanbul (UTC+3, no DST since 2016)
+    expect(next('2026-11-28T23:59:00Z', '06:00')).toBe('2026-11-29T03:00:00.000Z');
+    expect(next('2026-11-29T02:59:00Z', '06:00')).toBe('2026-11-29T03:00:00.000Z');
+    // exactly 06:00 counts as started: the next one is tomorrow
+    expect(next('2026-11-29T03:00:00Z', '06:00')).toBe('2026-11-30T03:00:00.000Z');
+    expect(next('2026-11-29T04:30:00Z', '08:00')).toBe('2026-11-29T05:00:00.000Z');
+    expect(next('2026-11-29T05:00:01Z', '08:00')).toBe('2026-11-30T05:00:00.000Z');
+  });
+
+  it('keeps 08:00 local across DST changes (the UTC offset moves, not the wall clock)', () => {
+    expect(next('2027-03-27T12:00:00Z', '08:00', 'Europe/Berlin')).toBe('2027-03-28T06:00:00.000Z');
+    expect(next('2027-03-27T06:00:00Z', '08:00', 'Europe/Berlin')).toBe('2027-03-27T07:00:00.000Z');
+    expect(next('2026-11-01T00:00:00Z', '08:00', 'America/New_York')).toBe(
+      '2026-11-01T13:00:00.000Z',
+    );
+  });
+
+  it('gives identical results whatever the host process timezone is', () => {
+    const original = process.env.TZ;
+    const results: string[] = [];
+    try {
+      for (const tz of ['UTC', 'America/Los_Angeles', 'Pacific/Kiritimati', 'Asia/Kathmandu']) {
+        process.env.TZ = tz;
+        const day = readerDay(new Date('2026-11-29T04:59:00Z'), 'Europe/Istanbul', settings);
+        results.push(
+          JSON.stringify({
+            ...day,
+            next: [next('2026-11-29T04:59:00Z', '06:00'), next('2026-11-29T04:59:00Z', '08:00')],
+          }),
+        );
+      }
+    } finally {
+      if (original === undefined) delete process.env.TZ;
+      else process.env.TZ = original;
+    }
+    expect(new Set(results).size).toBe(1);
+    expect(JSON.parse(results[0])).toMatchObject({
+      issueDate: '2026-11-29',
+      localTime: '07:59',
+      preparationDue: true,
+      deliveryDue: false,
+      next: ['2026-11-30T03:00:00.000Z', '2026-11-29T05:00:00.000Z'],
+    });
+  });
+
+  it('rejects an invalid timezone for next occurrences too', () => {
+    expect(() => next('2026-11-29T00:00:00Z', '06:00', 'Mars/Olympus')).toThrow(/Invalid timezone/);
   });
 });

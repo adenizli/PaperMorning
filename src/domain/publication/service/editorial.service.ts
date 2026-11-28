@@ -10,18 +10,35 @@ const PRIORITY_WEIGHT: Record<TopicPriority, number> = {
   [TopicPriority.LOW]: 1,
 };
 
+/** "A Study of X: v2" and "A study of X v2" are the same work (preprint vs journal version). */
+export function titleKey(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+const firstAuthor = (paper: ResearchPaperView): string =>
+  (paper.authors[0] ?? '').trim().toLowerCase();
+
 /**
  * Deterministic, reader-specific selection and ordering. Topic priority decides how much space a
  * topic gets; knowledge level is only passed on for narration. Scientific content is untouched.
+ *
+ * Quality rules: within a topic, relevance then recency decide; the same work never appears
+ * twice (same paper, or the same normalized title as a candidate or an earlier issue's paper,
+ * e.g. a preprint and its journal version); and a paper whose first author already has a paper
+ * in this issue waits until other candidates of that topic have been used (source diversity).
  */
 @Injectable()
 export class EditorialService {
   select(
     profile: ReaderProfileModel,
     candidates: ResearchPaperView[],
-    options: { maxArticles: number; excludedPaperIds?: string[] },
+    options: { maxArticles: number; excludedPaperIds?: string[]; excludedTitles?: string[] },
   ): SelectedArticle[] {
     const excluded = new Set(options.excludedPaperIds ?? []);
+    const usedTitles = new Set((options.excludedTitles ?? []).map(titleKey));
     const topics = [...profile.topics].sort(
       (a, b) =>
         PRIORITY_WEIGHT[b.priority] - PRIORITY_WEIGHT[a.priority] ||
@@ -41,8 +58,10 @@ export class EditorialService {
             a.analysisId.localeCompare(b.analysisId),
         );
       for (const paper of matching) {
-        if (assigned.has(paper.paperId)) continue;
+        const title = titleKey(paper.title);
+        if (assigned.has(paper.paperId) || usedTitles.has(title)) continue;
         assigned.add(paper.paperId);
+        usedTitles.add(title); // the best-ranked copy of a work wins
         queues.get(topic.topicKey)!.push(paper);
       }
     }
@@ -54,13 +73,21 @@ export class EditorialService {
       priority: TopicPriority;
       knowledgeLevel: KnowledgeLevel;
     }[] = [];
+    const authors = new Set<string>();
+    /** Best remaining paper of the queue, preferring a first author not yet in the issue. */
+    const next = (queue: ResearchPaperView[]): ResearchPaperView => {
+      const fresh = queue.findIndex((p) => !firstAuthor(p) || !authors.has(firstAuthor(p)));
+      const [paper] = queue.splice(fresh >= 0 ? fresh : 0, 1);
+      authors.add(firstAuthor(paper));
+      return paper;
+    };
     while (picks.length < options.maxArticles && [...queues.values()].some((q) => q.length > 0)) {
       for (const topic of topics) {
         const queue = queues.get(topic.topicKey)!;
         for (let i = 0; i < PRIORITY_WEIGHT[topic.priority] && queue.length > 0; i++) {
           if (picks.length >= options.maxArticles) break;
           picks.push({
-            paper: queue.shift()!,
+            paper: next(queue),
             topicKey: topic.topicKey,
             priority: topic.priority,
             knowledgeLevel: topic.knowledgeLevel,

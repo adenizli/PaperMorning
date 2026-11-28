@@ -12,6 +12,7 @@ import { FakeAnthropic } from '../../support/fake-anthropic';
 import { FakeMailTransport, InMemoryFileStorage } from '../../support/fake-integrations';
 import { extractPdfText } from '../../support/pdf-text';
 import {
+  cannedArticle,
   createReader,
   routingHandler,
   seedAnalyzedPaper,
@@ -37,7 +38,7 @@ describe('operator CLI (PostgreSQL)', () => {
   let fake: FakeAnthropic;
   let storage: InMemoryFileStorage;
 
-  async function boot(handler = routingHandler()) {
+  async function boot(handler = routingHandler(), env: Record<string, string> = {}) {
     fake = new FakeAnthropic(handler);
     storage = new InMemoryFileStorage();
     app = await createResearchApp({
@@ -45,7 +46,7 @@ describe('operator CLI (PostgreSQL)', () => {
       sources: { search: jest.fn().mockResolvedValue({ records: [], failures: [] }) },
       storage,
       mail: new FakeMailTransport(),
-      env: { RESEARCH_HAIKU_SCREENING: 'false', PUBLICATION_RETRY_BACKOFF_MINUTES: '10' },
+      env: { RESEARCH_HAIKU_SCREENING: 'false', PUBLICATION_RETRY_BACKOFF_MINUTES: '10', ...env },
     });
   }
   afterEach(() => app?.close());
@@ -78,7 +79,7 @@ describe('operator CLI (PostgreSQL)', () => {
       outcome: 'OK',
       exitCode: 0,
       issueStatus: 'READY',
-      template: 'issue-print-v2',
+      template: 'issue-print-v3',
       claudeCalls: 0,
       published: { verifiedUnchanged: true },
     });
@@ -139,6 +140,100 @@ describe('operator CLI (PostgreSQL)', () => {
       run: { attempts: 1, errorKind: 'VALIDATION_FAILED', nextAttemptAt },
       next: { action: 'WAIT', at: nextAttemptAt },
     });
+  });
+
+  it('ops:status: today, next runs, latest READY/SENT, budget and failures, read-only', async () => {
+    let articles = 0;
+    await boot(
+      routingHandler({
+        // The second article (the 2026-11-26 issue) invents a number: VALIDATION_FAILED.
+        ARTICLE: () => {
+          const data = cannedArticle();
+          if (++articles === 2) {
+            (data.sections as { key: string; body: string }[]).find(
+              (s) => s.key === 'evidence',
+            )!.body = 'Hata %73 azaldı.';
+          }
+          return { data };
+        },
+      }),
+      { PUBLICATION_MAX_ARTICLES: '1' },
+    );
+    await seedAnalyzedPaper(app, 'robotics');
+    await seedAnalyzedPaper(app, 'robotics');
+    await createReader(app, 'reader_ops', topics);
+    expect(
+      await run('publication:prepare', { user: 'reader_ops', date: '2026-11-25' }),
+    ).toMatchObject({ outcome: 'READY' });
+    expect(await run('publication:prepare', { user: 'reader_ops', date: DATE })).toMatchObject({
+      outcome: 'FAILED',
+      exitCode: 1,
+    });
+
+    const db = app.get(DataSource);
+    const snapshot = async () =>
+      JSON.stringify(
+        await db.query(
+          `SELECT (SELECT count(*) FROM issue) AS issues, (SELECT count(*) FROM publication_run) AS runs,
+                  (SELECT max(updated_at) FROM publication_run) AS run_changed,
+                  (SELECT count(*) FROM article_variant) AS variants,
+                  (SELECT count(*) FROM email_delivery) AS deliveries,
+                  (SELECT count(*) FROM llm_usage) AS llm`,
+        ),
+      );
+    const before = { db: await snapshot(), calls: fake.calls.length };
+
+    // 07:00 in Istanbul on the failed day.
+    const status = await run('ops:status', { user: 'reader_ops', at: '2026-11-26T04:00:00Z' });
+    expect(status).toMatchObject({
+      outcome: 'OK',
+      exitCode: 0,
+      scheduler: { enabledInServer: false, prepareLocalTime: '06:00', deliveryLocalTime: '08:00' },
+      mail: { enabled: expect.any(Boolean) },
+      llm: { utcDay: '2026-11-26', budgetUsd: expect.any(Number) },
+    });
+    const [reader] = status.readers as Record<string, unknown>[];
+    expect(reader).toMatchObject({
+      user: 'reader_ops',
+      timezone: 'Europe/Istanbul',
+      issueDate: DATE,
+      localTime: '07:00',
+      preparationWindow: { from: '2026-11-26T03:00:00.000Z', until: '2026-11-26T07:00:00.000Z' },
+      nextPreparationAt: '2026-11-27T03:00:00.000Z',
+      nextDeliveryAt: '2026-11-26T05:00:00.000Z',
+      today: {
+        state: 'FAILED',
+        run: { attempts: 1, errorKind: 'VALIDATION_FAILED', stage: 'WRITING' },
+        next: { action: expect.stringMatching(/^(WAIT|PREPARE)$/) },
+      },
+      latestReady: { issueDate: '2026-11-25' },
+      latestSent: null,
+    });
+    const failures = status.failures as {
+      articleVariants: Record<string, unknown>[];
+      analyses: unknown[];
+    };
+    expect(failures.analyses).toEqual([]);
+    expect(failures.articleVariants).toEqual([
+      expect.objectContaining({
+        promptVersion: 'article-v3',
+        attempts: 1,
+        maxAttempts: 3,
+        retryable: true,
+        retryEligible: true,
+        errorKind: 'VALIDATION_FAILED',
+        error: expect.stringContaining('numbers not present'),
+      }),
+    ]);
+
+    // Today's real UTC day: the calls made above are counted against the budget.
+    const now = await run('ops:status', { limit: '5' });
+    const llm = now.llm as Record<string, number>;
+    expect(llm.calls).toBeGreaterThan(0);
+    expect(llm.remainingUsd).toBeCloseTo(llm.budgetUsd - llm.spentUsd - llm.inFlightUsd, 6);
+    await expect(run('ops:status', { limit: '0' })).rejects.toBeInstanceOf(UsageError);
+
+    expect({ db: await snapshot(), calls: fake.calls.length }).toEqual(before);
   });
 
   it('SKIPPED -> exit 3; unknown reader -> usage error', async () => {

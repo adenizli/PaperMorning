@@ -109,6 +109,25 @@ export class IssueRepositoryService {
       .execute();
   }
 
+  /** The reader's most recent READY issue (operator status; read-only). */
+  async latestReady(
+    userId: string,
+  ): Promise<{ issueId: string; issueDate: string; publishedAt: string | null } | null> {
+    const [row]: Record<string, unknown>[] = await this.repo.query(
+      `SELECT id, issue_date::text AS issue_date, published_at
+         FROM issue WHERE user_id = $1 AND status = 'READY'
+        ORDER BY issue_date DESC LIMIT 1`,
+      [userId],
+    );
+    return row
+      ? {
+          issueId: row.id as string,
+          issueDate: row.issue_date as string,
+          publishedAt: row.published_at ? new Date(row.published_at as string).toISOString() : null,
+        }
+      : null;
+  }
+
   async findById(id: string): Promise<IssueModel | null> {
     const entity = await this.repo.findOneBy({ id });
     return entity ? toModel(entity) : null;
@@ -153,6 +172,17 @@ export class IssueRepositoryService {
       [userId, beforeDate],
     );
     return rows.map((r) => r.paper_id);
+  }
+
+  /** Titles of papers already published to this reader (a journal version of a used preprint). */
+  async listUsedPaperTitles(userId: string, beforeDate: string): Promise<string[]> {
+    const rows: { title: string | null }[] = await this.repo.query(
+      `SELECT DISTINCT a->'source'->>'title' AS title
+         FROM issue i, jsonb_array_elements(i.content->'articles') a
+        WHERE i.user_id = $1 AND i.issue_date < $2`,
+      [userId, beforeDate],
+    );
+    return rows.map((r) => r.title).filter((t): t is string => Boolean(t));
   }
 
   /** Reuse a closing report already generated for the same research package and level. */

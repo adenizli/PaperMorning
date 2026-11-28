@@ -63,6 +63,16 @@ export function cannedOutlook(
     inferences: [
       { statement: 'Bu eğilim farklı görevlerde de geçerli olabilir.', paperKeys: keys },
     ],
+    contrasts:
+      keys.length >= 2
+        ? [
+            {
+              statement:
+                'İlişki: Çalışmalar aynı verimlilik sorununu farklı yöntemlerle ele alıyor.',
+              paperKeys: keys.slice(0, 2),
+            },
+          ]
+        : [],
     academicOpportunities: [
       {
         question: 'Kazanç farklı ortamlarda korunuyor mu?',
@@ -132,7 +142,12 @@ let counter = 0;
 export async function seedAnalyzedPaper(
   app: INestApplication,
   topicKey: string,
-  overrides: { title?: string; publishedAt?: string; abstractSuffix?: string } = {},
+  overrides: {
+    title?: string;
+    publishedAt?: string;
+    abstractSuffix?: string;
+    authors?: string[];
+  } = {},
 ): Promise<{ versionId: string; analysisId: string; paperId: string }> {
   counter++;
   const topic = findTopic(topicKey)!;
@@ -142,6 +157,7 @@ export async function seedAnalyzedPaper(
       sourceRecordId: `${id}v1`,
       arxivId: id,
       title: overrides.title ?? `${topic.keywords[0]} study ${counter}`,
+      ...(overrides.authors ? { authors: overrides.authors } : {}),
       categories: topic.arxivCategories,
       publishedAt: overrides.publishedAt ?? '2026-11-20',
       landingUrl: `https://arxiv.org/abs/${id}v1`,

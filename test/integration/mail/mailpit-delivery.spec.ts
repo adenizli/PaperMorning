@@ -39,6 +39,8 @@ interface MailpitSummary {
 }
 interface MailpitMessage {
   ID: string;
+  Subject: string;
+  Text: string;
   To: { Address: string }[];
   Cc: unknown[] | null;
   Bcc: unknown[] | null;
@@ -101,6 +103,10 @@ const part = async (id: string, partId: string) =>
     expect(full.To.map((t) => t.Address)).toEqual([address]); // only the owner, no cc/bcc
     expect(full.Cc ?? []).toEqual([]);
     expect(full.Bcc ?? []).toEqual([]);
+    // Turkish letters decoded correctly from the RFC 2047 subject and the UTF-8 body.
+    expect(full.Subject).toMatch(/^PaperMorning · 26 Kasım 2026 — \S/);
+    expect(full.Text).toContain('Sayının tam PDF sürümü bu e-postanın ekindedir');
+    expect(full.Text).toContain('Günlük e-postayı durdurmak için');
     expect(full.Attachments).toHaveLength(1);
     const [attachment] = full.Attachments;
     expect(attachment).toMatchObject({
@@ -161,6 +167,72 @@ const part = async (id: string, partId: string) =>
       expect(await messagesTo(`${name}@example.org`)).toEqual([]);
       await app.close();
     }
+  });
+
+  it('mail:verify checks connectivity without sending; a failure is reported without secrets', async () => {
+    await boot(smtpEnv);
+    const before = (await (await fetch(`${API}/api/v1/messages?limit=1`)).json()) as {
+      total: number;
+    };
+    expect(await cli('mail:verify', {})).toMatchObject({
+      outcome: 'OK',
+      exitCode: 0,
+      security: 'none',
+      messagesSent: 0,
+    });
+    const after = (await (await fetch(`${API}/api/v1/messages?limit=1`)).json()) as {
+      total: number;
+    };
+    expect(after.total).toBe(before.total);
+    await app.close();
+
+    // Nothing listens on port 1: connection refused, reported as FAILED (exit 1).
+    await boot({
+      ...smtpEnv,
+      SMTP_PORT: '1',
+      SMTP_USER: 'pm-user-should-not-leak',
+      SMTP_PASSWORD: 'pm-password-should-not-leak',
+    });
+    const failed = await cli('mail:verify', {});
+    expect(failed).toMatchObject({ outcome: 'FAILED', exitCode: 1, authConfigured: true });
+    expect(JSON.stringify(failed)).not.toMatch(/should-not-leak/);
+  });
+
+  it('mail:test sends one synthetic message with a Turkish subject and the PDF, and writes nothing', async () => {
+    await boot(smtpEnv);
+    const address = `mp_test_${run}@example.org`;
+    const db = app.get(DataSource);
+    const deliveries = async () =>
+      (await db.query(`SELECT count(*)::int AS n FROM email_delivery`))[0].n as number;
+    const before = await deliveries();
+
+    await expect(cli('mail:test', { to: 'a@example.org,b@example.org' })).rejects.toThrow(
+      /exactly one explicit recipient/,
+    );
+    const result = await cli('mail:test', { to: address });
+    expect(result).toMatchObject({ outcome: 'SENT', exitCode: 0, to: address, databaseWrites: 0 });
+    const [summary, ...others] = await messagesTo(address);
+    expect(others).toEqual([]);
+    const full = await message(summary.ID);
+    expect(full.Subject).toBe('PaperMorning SMTP testi — çğıöşü ÇĞİÖŞÜ');
+    expect(full.Text).toContain('Türkçe karakter denetimi: çğıöşü ÇĞİÖŞÜ');
+    expect(full.To.map((t) => t.Address)).toEqual([address]);
+    const [attachment] = full.Attachments;
+    expect(attachment).toMatchObject({
+      FileName: 'PaperMorning-SMTP-testi.pdf',
+      ContentType: 'application/pdf',
+    });
+    const bytes = await part(summary.ID, attachment.PartID);
+    expect(sha256Hex(bytes)).toBe((result.attachment as { sha256: string }).sha256);
+    expect(await deliveries()).toBe(before);
+
+    await app.close();
+    await boot({ ...smtpEnv, MAIL_ENABLED: 'false' });
+    expect(await cli('mail:test', { to: address })).toMatchObject({
+      outcome: 'DISABLED',
+      exitCode: 3,
+    });
+    expect(await messagesTo(address)).toHaveLength(1);
   });
 
   it('scheduler:plan is a dry run: reports WOULD_PREPARE, sends and writes nothing, no Claude call', async () => {

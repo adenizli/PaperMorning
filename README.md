@@ -121,6 +121,9 @@ npm run cli -- issue:preview --issue <id> [--out <yeni.pdf>|-]                  
 npm run cli -- delivery:send --user <kullanıcı> --date 2026-11-24               # GERÇEK gönderim: opt-in + READY + PDF eki şart
 npm run cli -- delivery:resolve --delivery <id> --as SENT|RETRY                  # UNKNOWN teslimat için operatör kararı
 npm run cli -- system:check                                                      # etkin anahtarlar (sırlar yazılmaz)
+npm run cli -- ops:status [--user <kullanıcı>]                                   # salt okunur: bugün, sonraki 06:00/08:00, bütçe, hatalar
+npm run cli -- mail:verify                                                       # SMTP bağlantı + TLS + AUTH; ileti göndermez
+npm run cli -- mail:test --to <adres>                                            # tek sentetik test e-postası (PDF ekli), kayıt yazmaz
 npm run cli -- pdf:smoke                                                         # veritabanısız gerçek Chromium render testi
 ```
 
@@ -134,7 +137,7 @@ Docker'da aynı komutlar `docker compose exec server node dist/bootstrap/cli.js 
 | 3 | Tasarım gereği bir şey yapılmadı | `SKIPPED`, `NOT_OPTED_IN`, `NOT_READY`, `DISABLED` |
 | 75 | Geçici, sonra tekrar deneyin | `IN_PROGRESS` |
 
-Salt okunur komutlar (`publication:status`, `scheduler:plan`, `llm:usage`, `system:check`) yanıt verebildikleri sürece 0 ile çıkar; durum `outcome`/`state` alanındadır. `publication:prepare` başarısızlıkta `retry` alanında deneme sayısını, üst sınırı, hata türünü ve bir sonraki denemenin en erken zamanını (`nextAttemptAt`) gösterir; veritabanında elle değişiklik gerekmez. Yayımlanmış bir sayıyı yeni şablonla değiştirmeden incelemek, gerçek SMTP testi ve zamanlayıcının kontrollü açılışı için adım adım prosedürler: [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Salt okunur komutlar (`publication:status`, `ops:status`, `scheduler:plan`, `llm:usage`, `system:check`) yanıt verebildikleri sürece 0 ile çıkar; durum `outcome`/`state` alanındadır. `publication:prepare` başarısızlıkta `retry` alanında deneme sayısını, üst sınırı, hata türünü ve bir sonraki denemenin en erken zamanını (`nextAttemptAt`) gösterir; veritabanında elle değişiklik gerekmez. Yayımlanmış bir sayıyı yeni şablonla değiştirmeden incelemek, SMTP kurulumu ve test e-postası, kontrollü çok makaleli yayın, zamanlayıcının üretimde açılması, geri alma ve acil durdurma için adım adım prosedürler: [docs/OPERATIONS.md](docs/OPERATIONS.md) (§11–§18 v1.2 pilotu).
 
 ### Yayın ve teslimat davranışı
 

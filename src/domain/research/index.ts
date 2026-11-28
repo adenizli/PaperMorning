@@ -8,6 +8,7 @@
 export { ResearchModule } from './research.module';
 export { ResearchService } from './service/research.service';
 export { ResearchQueryService } from './service/research-query.service';
+export type { FailedAnalysisView } from './service/research-query.service';
 export type { ResearchPaperView, ResearchQuery } from './model/research-paper-view.model';
 export type { DailyResearchRequest } from './model/research-request.model';
 export { ResearchRunStatus } from './model/research-run.model';

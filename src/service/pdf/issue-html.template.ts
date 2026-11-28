@@ -22,7 +22,7 @@ import type {
  * the following text). The heading hierarchy (h1 brand > h2 articles/report > h3 sections) is what
  * Chromium turns into PDF bookmarks, so nothing decorative is marked up as a heading.
  */
-export const ISSUE_TEMPLATE_VERSION = 'issue-print-v2';
+export const ISSUE_TEMPLATE_VERSION = 'issue-print-v3';
 
 export interface RenderIssueOptions {
   /** QA preview of an existing snapshot: visibly marked, never a published issue. */
@@ -216,8 +216,13 @@ function article(a: IssueArticle, level: 2 | 3): string {
         `<section class="sec"><${sub}>${e(s.heading || SECTION_FALLBACK[s.key])}</${sub}>${paragraphs(s.body)}</section>`,
     )
     .join('');
+  // Only the abstract was read: say so in the heading, not "the source" (the paper may cover it).
+  const unknownsTitle =
+    a.source.coverage === ContentCoverage.ABSTRACT_ONLY
+      ? 'Özette belirtilmeyenler'
+      : 'Makalede belirtilmeyenler';
   const unknowns = a.notReported?.length
-    ? `<aside class="unknowns" aria-label="Kaynakta belirtilmeyenler"><div class="box-title">Kaynakta belirtilmeyenler</div>${list(a.notReported)}</aside>`
+    ? `<aside class="unknowns" aria-label="${unknownsTitle}"><div class="box-title">${unknownsTitle}</div>${list(a.notReported)}</aside>`
     : '';
   const glossary = a.glossary.length
     ? `<aside class="glossary" aria-label="Terimler"><div class="box-title">Terimler</div><dl>${a.glossary

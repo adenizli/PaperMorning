@@ -66,6 +66,8 @@ describe('CLI outcome contract', () => {
     });
     const report = systemCheck(config);
     expect(report.scheduler.enabledInServer).toBe(false);
+    // A CLI process forces its own scheduler off; it reports the server's configured value.
+    expect(systemCheck(config, true).scheduler.enabledInServer).toBe(true);
     expect(report.mail).toMatchObject({ enabled: false, smtpHostConfigured: true });
     expect(report.llm.apiKeyConfigured).toBe(true);
     const json = JSON.stringify(report);
