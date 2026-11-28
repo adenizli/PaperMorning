@@ -26,6 +26,9 @@ import {
   NINE_OF_TEN_UNSUPPORTED_TR,
 } from '../../fixtures/nine-of-ten.fixture';
 import {
+  GRIPPER_ABSTRACT,
+  GRIPPER_PROBLEM_TR,
+  GRIPPER_TITLE,
   ROLLOUTS_ABSTRACT,
   ROLLOUTS_ARTICLE_TR,
   ROLLOUTS_TITLE,
@@ -332,6 +335,63 @@ describe('numeric grounding by value (Geveze 2026-11-28 false positives)', () =>
         { fingerprint: 'f'.repeat(64), model: 'claude-sonnet-5-5' },
       ),
     ).toThrow(/numbers not present in the analyses: 470 \[evidence\[0\]\.statement:/);
+  });
+});
+
+describe('dimension vs billion: the 2026-11-28 retry failure ("3B" = üç boyutlu)', () => {
+  const gripper = (abstract: string): ResearchPaperView =>
+    view({
+      title: GRIPPER_TITLE,
+      abstract,
+      analysis: {
+        summary: 'Language models predict 3D gripper poses poorly, even with extended reasoning.',
+        problem: 'Spatial grasp reasoning by language models is weak.',
+        priorApproach: 'The abstract compares against geometric baselines.',
+        contribution: 'An evaluation of grasp-pose prediction by language models.',
+        methods: 'Models predict gripper poses from scene descriptions.',
+        findings: [
+          {
+            statement: 'Extended reasoning does not make the predicted poses accurate.',
+            evidence: 'Stated in the abstract.',
+          },
+        ],
+        limitations: ['Abstract only.'],
+        keyTerms: [],
+        openQuestions: [],
+      },
+    });
+  const withProblem = (body: string) => {
+    const data = cannedArticle('Dil modelleri kavramada zorlanıyor');
+    (data.sections as { key: string; body: string }[]).find((s) => s.key === 'problem')!.body =
+      body;
+    return data;
+  };
+
+  it('accepts the exact production sentence when the source says "3D gripper poses"', () => {
+    const content = validateArticle(
+      withProblem(GRIPPER_PROBLEM_TR),
+      groundingSourcesOf(gripper(GRIPPER_ABSTRACT)),
+    );
+    expect(content.sections.find((s) => s.key === 'problem')!.body).toBe(GRIPPER_PROBLEM_TR);
+  });
+
+  it('still rejects "3B" when the source has no 3D evidence, with field and context', () => {
+    const noDimension = GRIPPER_ABSTRACT.replace(/3D /g, '');
+    const sources = groundingSourcesOf(gripper(noDimension));
+    sources.numbers = sources.numbers.replace(/3D /g, ''); // the analysis says 3D as well
+    expect(() => validateArticle(withProblem(GRIPPER_PROBLEM_TR), sources)).toThrow(
+      'Article output invalid: numbers not present in the analysis/abstract: 3B ' +
+        '[sections[problem].body: "…eri, genişletilmiş akıl yürütmeyle bile 3B gripper pozlarını zayıf tahmin ediyor."]',
+    );
+  });
+
+  it('a 3D source does not license "3B parametre" (three billion parameters)', () => {
+    expect(() =>
+      validateArticle(
+        withProblem('Model 3B parametreye sahip.'),
+        groundingSourcesOf(gripper(GRIPPER_ABSTRACT)),
+      ),
+    ).toThrow(/numbers not present in the analysis\/abstract: 3B \[sections\[problem\]\.body/);
   });
 });
 
