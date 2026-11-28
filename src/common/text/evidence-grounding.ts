@@ -247,11 +247,13 @@ export function findAbsenceInferences(generated: string[], source: string): Abse
  * ("... özette ele alınmıyor").
  *
  * Deliberately narrow (Turkish output, lower-cased with Turkish rules):
- * - flagged: a negated study activity ("ele alınmıyor", "test edilmemiş", "incelenmiyor",
- *   "karşılaştırmıyor", "yer almıyor", ...), or a negated reporting verb ("bildirmiyor",
- *   "belirtilmiyor") whose subject is the study itself ("bu çalışmada", "makale", "yazarlar");
- * - allowed: any sentence scoped to the abstract ("özet…"), attributed to the authors
- *   ("yazarlar ... belirtiyor"), or explicitly uncertain ("bilinmiyor", "belirsiz").
+ * - flagged: a negated research activity ("ele alınmıyor", "test edilmemiş", "incelenmiyor",
+ *   "karşılaştırmıyor", "yer almıyor", ...), or a negated reporting / method verb ("bildirmiyor",
+ *   "içermiyor", "ölçmüyor", ...) whose subject is the study itself ("bu çalışmada", "makale",
+ *   "yazarlar"); "Sistem insan müdahalesi içermiyor" describes the method and is allowed;
+ * - allowed: any sentence scoped to the abstract ("özet…"), about what PaperMorning read ("tam
+ *   metin ... incelenmedi"), attributed to the authors ("yazarlar ... belirtiyor"), or explicitly
+ *   uncertain ("bilinmiyor", "belirsiz").
  * Epistemic verbs about evidence ("göstermiyor", "doğrulamıyor") are not flagged.
  */
 const TR_LETTER = 'a-zçğıöşüâîû';
@@ -275,20 +277,11 @@ const ACTIVITY_STEMS = [
   'değerlendir',
   'karşılaştırıl',
   'karşılaştır',
-  'ölçül',
-  'ölç',
   'tartışıl',
   'tartış',
   'araştırıl',
   'araştır',
-  'uygulan',
-  'uygula',
   'doğrulan',
-  'sunul',
-  'sun',
-  'içer',
-  'kapsan',
-  'kapsa',
   'analiz edil',
   'analiz et',
   'simüle edil',
@@ -296,7 +289,11 @@ const ACTIVITY_STEMS = [
   'yapıl',
   'gerçekleştiril',
 ];
-const REPORTING_STEMS = [
+/**
+ * Verbs that also describe the METHOD ("Sistem insan müdahalesi içermiyor", "Model kuvveti
+ * ölçmüyor") or reporting: flagged only when the study itself is the subject.
+ */
+const SUBJECT_STEMS = [
   'bildiril',
   'bildir',
   'belirtil',
@@ -304,14 +301,25 @@ const REPORTING_STEMS = [
   'raporlan',
   'raporla',
   'açıklan',
+  'içer',
+  'kapsan',
+  'kapsa',
+  'sunul',
+  'sun',
+  'uygulan',
+  'uygula',
+  'ölçül',
+  'ölç',
 ];
 const stems = (list: string[]) => list.map((s) => s.replace(/ /g, '\\s+')).join('|');
 const STUDY_ACTIVITY_NEGATED = new RegExp(
   `(?<![${TR_LETTER}])(?:${stems(ACTIVITY_STEMS)})${NEGATED}`,
 );
-const REPORTING_NEGATED = new RegExp(`(?<![${TR_LETTER}])(?:${stems(REPORTING_STEMS)})${NEGATED}`);
+const SUBJECT_NEGATED = new RegExp(`(?<![${TR_LETTER}])(?:${stems(SUBJECT_STEMS)})${NEGATED}`);
 const STUDY_SUBJECT = new RegExp(`(?<![${TR_LETTER}])(?:çalışma|makale|araştırma|yazar)`);
 const ABSTRACT_SCOPE = /özet|abstract/;
+/** About what PaperMorning read ("Tam metin ve tablolar incelenmedi"), not about the study. */
+const READING_SCOPE = /tam\s+metin|tam\s+metn|papermorning/;
 const ATTRIBUTION = new RegExp(
   `(?<![${TR_LETTER}])(?:belirt|bildir|vurgula|ifade\\s+ed|not\\s+ed|kabul\\s+ed|aktar|söyl)(?:iyor|ıyor|uyor|üyor|mekte|makta|ir|ır|ur|ür|di|dı|du|dü|miş|mış)`,
 );
@@ -324,8 +332,15 @@ export function findStudyScopeAbsenceClaims(generated: string[]): string[] {
   for (const text of generated) {
     for (const sentence of splitSentences(text)) {
       const s = sentence.toLocaleLowerCase('tr');
-      if (ABSTRACT_SCOPE.test(s) || ATTRIBUTION.test(s) || EXPLICIT_UNCERTAINTY.test(s)) continue;
-      if (STUDY_ACTIVITY_NEGATED.test(s) || (REPORTING_NEGATED.test(s) && STUDY_SUBJECT.test(s))) {
+      if (
+        ABSTRACT_SCOPE.test(s) ||
+        READING_SCOPE.test(s) ||
+        ATTRIBUTION.test(s) ||
+        EXPLICIT_UNCERTAINTY.test(s)
+      ) {
+        continue;
+      }
+      if (STUDY_ACTIVITY_NEGATED.test(s) || (SUBJECT_NEGATED.test(s) && STUDY_SUBJECT.test(s))) {
         claims.push(sentence);
       }
     }

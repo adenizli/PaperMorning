@@ -79,6 +79,7 @@ describe('abstract-only scope: absence in the abstract is not absence in the stu
     'Simülasyondan gerçek robota aktarım ele alınmıyor.',
     'Yazarlar yöntemi gerçek bir robotta test etmiyor.',
     'Makale gerçek dünya deneyleri içermiyor.',
+    'Çalışma açık kaynak kod sunmuyor.',
     'Yöntem gerçek donanımda doğrulanmamış.',
     'Gerçek robot deneyi yapılmamış.',
     'Farklı tutucularla karşılaştırma yapılmıyor.',
@@ -100,6 +101,10 @@ describe('abstract-only scope: absence in the abstract is not absence in the stu
     'Sonuçlar, yöntemin her koşulda çalıştığını göstermiyor.', // epistemic, about evidence
     'Bu bulgu genellemeyi doğrulamıyor.',
     'Yöntem etiketli veri gerektirmiyor.',
+    'Tam metin, şekiller ve tablolar incelenmedi.', // about what PaperMorning read
+    'PaperMorning tam metni değerlendirmedi.',
+    'Sistem insan müdahalesi içermiyor.', // a property of the method, not of the study
+    'Model temas kuvvetini ölçmüyor.',
     'Yazarlar başarı oranında belirgin bir artış bildiriyor.',
   ])('allows %j', (sentence) => {
     expect(findStudyScopeAbsenceClaims([sentence])).toEqual([]);
