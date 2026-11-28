@@ -87,7 +87,7 @@ describe('DailyPublicationScheduler (simulated clock, PostgreSQL)', () => {
     expect(mail.sent).toHaveLength(0);
     await minute('2026-11-24T05:00:00Z'); // 08:00 Istanbul, 00:00 New York
     expect(sentTo('ist')).toHaveLength(1);
-    expect(sentTo('ist')[0].subject).toBe('PaperMorning | 2026-11-24');
+    expect(sentTo('ist')[0].subject).toMatch(/^PaperMorning · 24 Kasım 2026 — /);
     expect(sentTo('nyc')).toHaveLength(0);
 
     await minute('2026-11-24T11:00:00Z'); // 06:00 New York -> prepare
@@ -160,7 +160,7 @@ describe('DailyPublicationScheduler (simulated clock, PostgreSQL)', () => {
     await db.query(`UPDATE publication_run SET next_attempt_at = now() - interval '1 second'`);
     await minute('2026-11-24T05:30:00Z'); // 08:30: ready late, still inside the window
     expect(sentTo('ist')).toHaveLength(2);
-    expect(sentTo('ist')[1].subject).toBe('PaperMorning | 2026-11-24');
+    expect(sentTo('ist')[1].subject).toMatch(/^PaperMorning · 24 Kasım 2026 — /);
   });
 
   it('stops automatic work after the late window; a manual run publishes for the web without emailing', async () => {

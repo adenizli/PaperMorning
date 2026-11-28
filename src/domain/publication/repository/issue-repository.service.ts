@@ -155,6 +155,17 @@ export class IssueRepositoryService {
     return rows.map((r) => r.paper_id);
   }
 
+  /** Titles of papers already published to this reader (a journal version of a used preprint). */
+  async listUsedPaperTitles(userId: string, beforeDate: string): Promise<string[]> {
+    const rows: { title: string | null }[] = await this.repo.query(
+      `SELECT DISTINCT a->'source'->>'title' AS title
+         FROM issue i, jsonb_array_elements(i.content->'articles') a
+        WHERE i.user_id = $1 AND i.issue_date < $2`,
+      [userId, beforeDate],
+    );
+    return rows.map((r) => r.title).filter((t): t is string => Boolean(t));
+  }
+
   /** Reuse a closing report already generated for the same research package and level. */
   async findOutlookByFingerprint(fingerprint: string): Promise<OutlookReportModel | null> {
     const rows: { outlook: OutlookReportModel }[] = await this.repo.query(

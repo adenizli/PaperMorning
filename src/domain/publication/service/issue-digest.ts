@@ -15,13 +15,41 @@ export const STATUS_LABEL_TR: Record<PublicationStatus, string> = {
   [PublicationStatus.UNKNOWN]: 'Yayın durumu bilinmiyor',
 };
 
+const MONTHS_TR = [
+  'Ocak',
+  'Şubat',
+  'Mart',
+  'Nisan',
+  'Mayıs',
+  'Haziran',
+  'Temmuz',
+  'Ağustos',
+  'Eylül',
+  'Ekim',
+  'Kasım',
+  'Aralık',
+];
+
+/** "2026-11-28" -> "28 Kasım 2026" (no locale data needed). */
+export function turkishDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return `${day} ${MONTHS_TR[month - 1]} ${year}`;
+}
+
+/** "PaperMorning · 28 Kasım 2026 — <cover headline>", UTF-8 (encoded by the mailer per RFC 2047). */
+export function digestSubject(content: IssueContentModel): string {
+  const headline = content.cover.headline.replace(/\s+/g, ' ').trim();
+  const short = headline.length > 90 ? `${headline.slice(0, 89).trimEnd()}…` : headline;
+  return `PaperMorning · ${turkishDate(content.issueDate)} — ${short}`;
+}
+
 /**
  * Readable plain-text and HTML digest built only from the frozen snapshot. Every dynamic value is
  * HTML-escaped and only http(s) links are emitted.
  */
 export function buildDigest(input: DigestInput): { subject: string; text: string; html: string } {
   const { content } = input;
-  const subject = `PaperMorning | ${content.issueDate}`;
+  const subject = digestSubject(content);
   const lines: string[] = [
     `Merhaba ${input.username},`,
     '',

@@ -20,8 +20,10 @@ import { ResearchRunStatus } from '../domain/research';
 import { ResearchService } from '../domain/research/service/research.service';
 import { LlmService, startOfUtcDay } from '../service/llm/llm.service';
 import { ISSUE_TEMPLATE_VERSION } from '../service/pdf/issue-html.template';
+import { MailService } from '../service/mail/mail.service';
 import { describeSandbox } from '../service/pdf/pdf.service';
 import { CliResult, envelope, EXIT, exitCodeFor, UsageError } from './cli-outcome';
+import { isSingleAddress, MAIL_TEST_ATTACHMENT, mailTestMessage } from './mail-test';
 import { runPdfSmoke } from './pdf-smoke';
 
 /**
@@ -39,6 +41,8 @@ import { runPdfSmoke } from './pdf-smoke';
  *   scheduler:plan [--at 2026-11-24T05:00:00Z]                    (dry run: never prepares or sends)
  *   scheduler:tick [--at <ISO instant>] [--send]                  (real preparation; emails only with --send)
  *   system:check                                                  (read-only effective configuration)
+ *   mail:verify                                                   (SMTP connect + TLS + AUTH; sends nothing)
+ *   mail:test --to <address>                                      (one synthetic test email; no DB writes)
  *   pdf:smoke [--snapshot <issue.json>] [--out <file.pdf>|-]      (no database: real Chromium render)
  */
 type Args = Record<string, string | undefined>;
@@ -202,6 +206,42 @@ export const cliCommands: Record<string, Command> = {
     };
   },
   'system:check': (app) => Promise.resolve({ outcome: 'OK', ...systemCheck(app.get(AppConfig)) }),
+  'mail:verify': async (app) => {
+    const { mail } = app.get(AppConfig);
+    const result = await app.get(MailService).verify();
+    return {
+      outcome: result.ok ? 'OK' : 'FAILED',
+      host: mail.host ?? null,
+      port: mail.port,
+      security: mail.security,
+      authConfigured: Boolean(mail.user),
+      mailEnabled: mail.enabled,
+      error: result.ok ? null : result.reason,
+      messagesSent: 0,
+    };
+  },
+  'mail:test': async (app, args) => {
+    if (!isSingleAddress(args.to)) {
+      throw new UsageError('--to <address> is required: exactly one explicit recipient');
+    }
+    const mailer = app.get(MailService);
+    if (!mailer.isEnabled()) {
+      return { outcome: 'DISABLED', to: args.to, error: 'MAIL_ENABLED=false or SMTP_HOST unset' };
+    }
+    // The same renderer as production (real Chromium, Turkish fonts); synthetic content only.
+    const { result: smoke, pdf } = await runPdfSmoke(app.get(AppConfig));
+    if (!pdf) return { outcome: 'FAILED', to: args.to, error: `test PDF: ${smoke.error}` };
+    const sent = await mailer.send(mailTestMessage(args.to, pdf));
+    return {
+      outcome:
+        sent.status === 'ACCEPTED' ? 'SENT' : sent.status === 'UNKNOWN' ? 'UNKNOWN' : 'FAILED',
+      to: args.to,
+      messageId: sent.status === 'ACCEPTED' ? sent.messageId : null,
+      error: sent.status === 'ACCEPTED' ? null : sent.reason,
+      attachment: { filename: MAIL_TEST_ATTACHMENT, bytes: pdf.length, sha256: sha256Hex(pdf) },
+      databaseWrites: 0,
+    };
+  },
 };
 
 /** Effective, secret-free configuration relevant to a controlled activation. */

@@ -173,6 +173,7 @@ export class PublicationService {
       const selection = this.editorial.select(profile, candidates, {
         maxArticles: this.config.publication.maxArticlesPerIssue,
         excludedPaperIds: await this.issues.listUsedPaperIds(profile.reader.userId, issueDate),
+        excludedTitles: await this.issues.listUsedPaperTitles(profile.reader.userId, issueDate),
       });
       if (selection.length === 0) {
         throw new PublicationError(

@@ -274,6 +274,10 @@ export class IssueService {
     return this.issues.listUsedPaperIds(userId, beforeDate);
   }
 
+  listUsedPaperTitles(userId: string, beforeDate: string): Promise<string[]> {
+    return this.issues.listUsedPaperTitles(userId, beforeDate);
+  }
+
   listForUser(userId: string): Promise<IssueSummary[]> {
     return this.issues.listReady(userId);
   }

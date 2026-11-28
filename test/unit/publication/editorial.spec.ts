@@ -126,4 +126,64 @@ describe('EditorialService', () => {
       }),
     ).toEqual([]);
   });
+
+  describe('selection quality for multi-paper issues', () => {
+    const reader = profile([['robotics', TopicPriority.HIGH, KnowledgeLevel.BEGINNER]]);
+    const make = (
+      title: string,
+      author: string,
+      relevance: number,
+      publishedAt = '2026-11-20',
+    ) => ({
+      ...paper(['robotics'], relevance, publishedAt),
+      title,
+      authors: [author],
+    });
+
+    it('never selects the same work twice: preprint and journal version share a title', () => {
+      const preprint = make('Learning to Grasp: A Benchmark', 'A. Smith', 0.8);
+      const journal = make('Learning to grasp — a benchmark', 'A. Smith', 0.9);
+      const other = make('Tactile Sensing at Scale', 'B. Jones', 0.7);
+      const picked = editorial
+        .select(reader, [preprint, journal, other], { maxArticles: 3 })
+        .map((s) => s.paperId);
+      expect(picked).toEqual([journal.paperId, other.paperId]); // the better-ranked copy wins
+    });
+
+    it('skips a work already published to the reader under another paper id', () => {
+      const journal = make('Learning to grasp: a benchmark', 'A. Smith', 0.9);
+      const other = make('Tactile Sensing at Scale', 'B. Jones', 0.7);
+      const picked = editorial
+        .select(reader, [journal, other], {
+          maxArticles: 3,
+          excludedTitles: ['Learning to Grasp: A Benchmark'],
+        })
+        .map((s) => s.paperId);
+      expect(picked).toEqual([other.paperId]);
+    });
+
+    it('prefers a different first author before repeating one, without dropping papers', () => {
+      const a1 = make('Paper A1', 'A. Smith', 0.95);
+      const a2 = make('Paper A2', 'a. smith', 0.9);
+      const b1 = make('Paper B1', 'B. Jones', 0.8);
+      const c1 = make('Paper C1', 'C. Wu', 0.7);
+      const picked = editorial
+        .select(reader, [a1, a2, b1, c1], { maxArticles: 4 })
+        .map((s) => s.paperId);
+      expect(picked).toEqual([a1.paperId, b1.paperId, c1.paperId, a2.paperId]);
+      expect(
+        editorial.select(reader, [a1, a2, b1, c1], { maxArticles: 3 }).map((s) => s.paperId),
+      ).toEqual([a1.paperId, b1.paperId, c1.paperId]);
+    });
+
+    it('orders by relevance, then recency, and is deterministic', () => {
+      const older = make('Older', 'X', 0.8, '2026-11-18');
+      const newer = make('Newer', 'Y', 0.8, '2026-11-21');
+      const best = make('Best', 'Z', 0.9, '2026-11-10');
+      const run = () =>
+        editorial.select(reader, [older, newer, best], { maxArticles: 3 }).map((s) => s.paperId);
+      expect(run()).toEqual([best.paperId, newer.paperId, older.paperId]);
+      expect(run()).toEqual(run());
+    });
+  });
 });

@@ -87,7 +87,7 @@ describe('Daily email over real SMTP with the real PDF attached', () => {
     const stored = readFileSync(join(dataDir, 'private', issue.pdf_storage_key));
     const [email] = sink.received;
     expect(sink.sessions[0].secure).toBe(true); // STARTTLS was used
-    expect(email.subject).toBe(`PaperMorning | ${DATE}`);
+    expect(email.subject).toMatch(/^PaperMorning · 24 Kasım 2026 — \S/);
     expect(email.to && 'text' in email.to ? email.to.text : '').toBe('mail_reader@example.org');
     expect(email.attachments).toHaveLength(1);
     expect(email.attachments[0]).toMatchObject({
