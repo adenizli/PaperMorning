@@ -47,6 +47,40 @@ export class PaperAnalysisRepositoryService {
     return entity ? toModel(entity) : null;
   }
 
+  /** Most recent FAILED analyses with their paper title (operator status; read-only). */
+  async listFailed(limit: number): Promise<
+    {
+      id: string;
+      title: string;
+      promptVersion: string;
+      attempts: number;
+      retryable: boolean;
+      errorKind: string | null;
+      errorMessage: string | null;
+      updatedAt: Date;
+    }[]
+  > {
+    const rows: Record<string, unknown>[] = await this.repo.query(
+      `SELECT a.id, v.title, a.prompt_version, a.attempt_count, a.retryable, a.error_kind,
+              a.error_message, a.updated_at
+         FROM paper_analysis a JOIN paper_version v ON v.id = a.paper_version_id
+        WHERE a.status = 'FAILED'
+        ORDER BY a.updated_at DESC
+        LIMIT $1`,
+      [limit],
+    );
+    return rows.map((r) => ({
+      id: r.id as string,
+      title: r.title as string,
+      promptVersion: r.prompt_version as string,
+      attempts: Number(r.attempt_count),
+      retryable: Boolean(r.retryable),
+      errorKind: (r.error_kind as string | null) ?? null,
+      errorMessage: (r.error_message as string | null) ?? null,
+      updatedAt: new Date(r.updated_at as string),
+    }));
+  }
+
   async findById(id: string): Promise<PaperAnalysisModel | null> {
     const entity = await this.repo.findOneBy({ id });
     return entity ? toModel(entity) : null;

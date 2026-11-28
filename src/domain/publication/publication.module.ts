@@ -10,6 +10,7 @@ import { PublicationController } from './controller/publication.controller';
 import { PublicationRepositoryModule } from './repository/publication-repository.module';
 import { ArticleWritingService } from './service/article-writing.service';
 import { DeliveryService } from './service/delivery.service';
+import { OperationsService } from './service/operations.service';
 import { EditorialService } from './service/editorial.service';
 import { IssueService } from './service/issue.service';
 import { OutlookService } from './service/outlook.service';
@@ -37,7 +38,8 @@ import { PublicationService } from './service/publication.service';
     OutlookService,
     IssueService,
     DeliveryService,
+    OperationsService,
   ],
-  exports: [PublicationService, DeliveryService],
+  exports: [PublicationService, DeliveryService, OperationsService],
 })
 export class PublicationModule {}

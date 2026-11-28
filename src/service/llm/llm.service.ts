@@ -265,6 +265,42 @@ export class LlmService {
     );
   }
 
+  /**
+   * Today's budget as the operator sees it (UTC day, the same window the reservations use):
+   * settled spend, worst-case reservations of calls still in flight, and what is left.
+   */
+  async budgetStatus(now = new Date()): Promise<{
+    utcDay: string;
+    budgetUsd: number;
+    spentUsd: number;
+    inFlightUsd: number;
+    remainingUsd: number;
+    calls: number;
+    resetsAt: string;
+  }> {
+    const from = startOfUtcDay(now);
+    const to = new Date(from.getTime() + 86_400_000);
+    const [row]: Record<string, string>[] = await this.usage.query(
+      `SELECT COALESCE(SUM(cost_usd) FILTER (WHERE status <> 'RESERVED'), 0) AS spent,
+              COALESCE(SUM(cost_usd) FILTER (WHERE status = 'RESERVED'), 0) AS in_flight,
+              COUNT(*) FILTER (WHERE status <> 'RESERVED') AS calls
+         FROM llm_usage WHERE created_at >= $1 AND created_at < $2`,
+      [from, to],
+    );
+    const budgetUsd = this.config.llm.dailyBudgetUsd;
+    const spentUsd = roundUsd(Number(row?.spent ?? 0));
+    const inFlightUsd = roundUsd(Number(row?.in_flight ?? 0));
+    return {
+      utcDay: from.toISOString().slice(0, 10),
+      budgetUsd,
+      spentUsd,
+      inFlightUsd,
+      remainingUsd: roundUsd(Math.max(0, budgetUsd - spentUsd - inFlightUsd)),
+      calls: Number(row?.calls ?? 0),
+      resetsAt: to.toISOString(),
+    };
+  }
+
   /** Spend recorded since 00:00 UTC of the given instant. */
   async spentToday(now = new Date()): Promise<number> {
     const raw = await this.usage

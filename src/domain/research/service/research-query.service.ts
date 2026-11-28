@@ -1,9 +1,25 @@
 import { Injectable } from '@nestjs/common';
 import type { ResearchPaperView, ResearchQuery } from '../model/research-paper-view.model';
-import { PaperAnalysisRepositoryService } from '../repository/paper-analysis-repository.service';
+import {
+  MAX_ANALYSIS_ATTEMPTS,
+  PaperAnalysisRepositoryService,
+} from '../repository/paper-analysis-repository.service';
 import { PaperRepositoryService } from '../repository/paper-repository.service';
 import { PaperScreeningRepositoryService } from '../repository/paper-screening-repository.service';
 import { ANALYSIS_PROMPT_VERSION, ANALYSIS_SCHEMA_VERSION } from './paper-analysis.service';
+
+export interface FailedAnalysisView {
+  analysisId: string;
+  title: string;
+  promptVersion: string;
+  attempts: number;
+  maxAttempts: number;
+  retryable: boolean;
+  retryEligible: boolean;
+  errorKind: string | null;
+  error: string | null;
+  updatedAt: string;
+}
 
 /**
  * Narrow read-only API for other domains. Returns analyzed, topic-accepted papers with full
@@ -27,6 +43,29 @@ export class ResearchQueryService {
     });
     const views = await this.toViews(rows, query.topicKeys);
     return query.limit ? views.slice(0, query.limit) : views;
+  }
+
+  /**
+   * Recent FAILED analyses for the operator. `retryEligible`: a later research run will claim it
+   * again (retryable, attempts left, written by the current prompt version).
+   */
+  async listFailedAnalyses(limit = 10): Promise<FailedAnalysisView[]> {
+    const rows = await this.analyses.listFailed(limit);
+    return rows.map((r) => ({
+      analysisId: r.id,
+      title: r.title,
+      promptVersion: r.promptVersion,
+      attempts: r.attempts,
+      maxAttempts: MAX_ANALYSIS_ATTEMPTS,
+      retryable: r.retryable,
+      retryEligible:
+        r.retryable &&
+        r.attempts < MAX_ANALYSIS_ATTEMPTS &&
+        r.promptVersion === ANALYSIS_PROMPT_VERSION,
+      errorKind: r.errorKind,
+      error: r.errorMessage?.slice(0, 300) ?? null,
+      updatedAt: r.updatedAt.toISOString(),
+    }));
   }
 
   async getByAnalysisIds(analysisIds: string[], topicKeys: string[]): Promise<ResearchPaperView[]> {

@@ -11,6 +11,18 @@ import { ArticleVariantEntity } from './entity/article-variant.entity';
 
 export const MAX_VARIANT_ATTEMPTS = 3;
 
+/** A failed generation as the operator sees it (read-only status). */
+export interface FailedGenerationRow {
+  id: string;
+  label: string;
+  promptVersion: string;
+  attempts: number;
+  retryable: boolean;
+  errorKind: string | null;
+  errorMessage: string | null;
+  updatedAt: Date;
+}
+
 export type VariantClaimInput = Pick<
   ArticleVariantModel,
   | 'analysisId'
@@ -40,6 +52,27 @@ export class ArticleVariantRepositoryService {
   async findByFingerprint(generationFingerprint: string): Promise<ArticleVariantModel | null> {
     const entity = await this.repo.findOneBy({ generationFingerprint });
     return entity ? toModel(entity) : null;
+  }
+
+  /** Most recent FAILED variants (operator status; read-only). */
+  async listFailed(limit: number): Promise<FailedGenerationRow[]> {
+    const rows: Record<string, unknown>[] = await this.repo.query(
+      `SELECT id, generation_fingerprint, knowledge_level, prompt_version, attempt_count, retryable,
+              error_kind, error_message, updated_at
+         FROM article_variant WHERE status = 'FAILED'
+        ORDER BY updated_at DESC LIMIT $1`,
+      [limit],
+    );
+    return rows.map((r) => ({
+      id: r.id as string,
+      label: `${(r.generation_fingerprint as string).slice(0, 12)} (${r.knowledge_level as string})`,
+      promptVersion: r.prompt_version as string,
+      attempts: Number(r.attempt_count),
+      retryable: Boolean(r.retryable),
+      errorKind: (r.error_kind as string | null) ?? null,
+      errorMessage: (r.error_message as string | null) ?? null,
+      updatedAt: new Date(r.updated_at as string),
+    }));
   }
 
   async findById(id: string): Promise<ArticleVariantModel | null> {

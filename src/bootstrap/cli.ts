@@ -13,6 +13,7 @@ import { DailyPublicationScheduler } from '../core/scheduler/daily-publication.s
 import { AccountService } from '../domain/account/service/account.service';
 import type { IssueContentModel } from '../domain/publication/model/issue-content.model';
 import { DeliveryService } from '../domain/publication/service/delivery.service';
+import { OperationsService } from '../domain/publication/service/operations.service';
 import { IssueService } from '../domain/publication/service/issue.service';
 import { describePublicationStatus } from '../domain/publication/service/publication-status';
 import { PublicationService } from '../domain/publication/service/publication.service';
@@ -41,6 +42,7 @@ import { runPdfSmoke } from './pdf-smoke';
  *   scheduler:plan [--at 2026-11-24T05:00:00Z]                    (dry run: never prepares or sends)
  *   scheduler:tick [--at <ISO instant>] [--send]                  (real preparation; emails only with --send)
  *   system:check                                                  (read-only effective configuration)
+ *   ops:status [--user <u>] [--at <ISO instant>] [--limit 10]     (read-only operator overview)
  *   mail:verify                                                   (SMTP connect + TLS + AUTH; sends nothing)
  *   mail:test --to <address>                                      (one synthetic test email; no DB writes)
  *   pdf:smoke [--snapshot <issue.json>] [--out <file.pdf>|-]      (no database: real Chromium render)
@@ -49,6 +51,14 @@ type Args = Record<string, string | undefined>;
 type Command = (app: INestApplicationContext, args: Args) => Promise<CliResult>;
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
+
+/**
+ * The CLI process never runs the cron ticks (it forces SCHEDULER_ENABLED=false for itself), so
+ * the server's setting is captured before that override and reported as `enabledInServer`.
+ */
+let serverSchedulerEnabled: boolean | null = null;
+const schedulerEnabledInServer = (config: AppConfig) =>
+  serverSchedulerEnabled ?? config.scheduler.enabled;
 
 export const cliCommands: Record<string, Command> = {
   'research:run': async (app, args) => {
@@ -205,7 +215,51 @@ export const cliCommands: Record<string, Command> = {
       readers: merge(prepare, deliver),
     };
   },
-  'system:check': (app) => Promise.resolve({ outcome: 'OK', ...systemCheck(app.get(AppConfig)) }),
+  'system:check': (app) => {
+    const config = app.get(AppConfig);
+    return Promise.resolve({
+      outcome: 'OK',
+      ...systemCheck(config, schedulerEnabledInServer(config)),
+    });
+  },
+  'ops:status': async (app, args) => {
+    const at = requireInstant(args);
+    const limit = args.limit ? Number(args.limit) : 10;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new UsageError('--limit must be an integer between 1 and 100');
+    }
+    const config = app.get(AppConfig);
+    const operations = app.get(OperationsService);
+    const accounts = app.get(AccountService);
+    let schedules = await app.get(DailyPublicationScheduler).describeSchedules(at);
+    if (args.user) {
+      const userId = await requireUser(app, args);
+      schedules = schedules.filter((s) => s.userId === userId);
+    }
+    const readers = [];
+    for (const schedule of schedules) {
+      const user = await accounts.getById(schedule.userId);
+      readers.push({
+        user: user?.username ?? null,
+        ...schedule,
+        ...(await operations.readerOverview(schedule.userId, schedule.issueDate, at)),
+      });
+    }
+    return {
+      outcome: 'OK',
+      at: at.toISOString(),
+      scheduler: {
+        enabledInServer: schedulerEnabledInServer(config),
+        prepareLocalTime: config.scheduler.prepareLocalTime,
+        deliveryLocalTime: config.scheduler.deliveryLocalTime,
+        lateWindowMinutes: config.scheduler.lateWindowMinutes,
+      },
+      mail: { enabled: config.mail.enabled },
+      llm: await app.get(LlmService).budgetStatus(at),
+      readers,
+      failures: await operations.recentFailures(limit),
+    };
+  },
   'mail:verify': async (app) => {
     const { mail } = app.get(AppConfig);
     const result = await app.get(MailService).verify();
@@ -245,12 +299,12 @@ export const cliCommands: Record<string, Command> = {
 };
 
 /** Effective, secret-free configuration relevant to a controlled activation. */
-export function systemCheck(config: AppConfig) {
+export function systemCheck(config: AppConfig, enabledInServer = config.scheduler.enabled) {
   return {
     nodeEnv: config.nodeEnv,
     runtime: config.pdf.runtime,
     scheduler: {
-      enabledInServer: config.scheduler.enabled,
+      enabledInServer,
       prepareLocalTime: config.scheduler.prepareLocalTime,
       deliveryLocalTime: config.scheduler.deliveryLocalTime,
       lateWindowMinutes: config.scheduler.lateWindowMinutes,
@@ -394,7 +448,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  // CLI processes never run the cron ticks; the long-running server owns scheduling.
+  // CLI processes never run the cron ticks; the long-running server owns scheduling. Record what
+  // the server is configured to do first, so status commands report it truthfully.
+  try {
+    serverSchedulerEnabled = loadAppConfig(process.env).scheduler.enabled;
+  } catch {
+    serverSchedulerEnabled = null; // the context creation below reports the configuration error
+  }
   process.env.SCHEDULER_ENABLED = 'false';
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: new StderrLogger('cli', { logLevels: ['error', 'warn', 'log'] }),

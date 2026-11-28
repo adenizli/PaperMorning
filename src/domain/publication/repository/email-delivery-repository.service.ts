@@ -138,6 +138,59 @@ export class EmailDeliveryRepositoryService {
     return entity ? toModel(entity) : null;
   }
 
+  /** The reader's most recent SENT email (operator status; read-only). */
+  async latestSent(
+    userId: string,
+  ): Promise<{ issueId: string; issueDate: string; sentAt: string } | null> {
+    const [row]: Record<string, unknown>[] = await this.repo.query(
+      `SELECT d.issue_id, i.issue_date::text AS issue_date, d.sent_at
+         FROM email_delivery d JOIN issue i ON i.id = d.issue_id
+        WHERE d.user_id = $1 AND d.status = 'SENT'
+        ORDER BY d.sent_at DESC NULLS LAST LIMIT 1`,
+      [userId],
+    );
+    return row
+      ? {
+          issueId: row.issue_id as string,
+          issueDate: row.issue_date as string,
+          sentAt: new Date(row.sent_at as string).toISOString(),
+        }
+      : null;
+  }
+
+  /** FAILED and UNKNOWN deliveries, newest first (operator status; read-only). */
+  async listProblems(limit: number): Promise<
+    {
+      id: string;
+      issueDate: string;
+      status: string;
+      attempts: number;
+      retryable: boolean;
+      errorCode: string | null;
+      errorMessage: string | null;
+      nextAttemptAt: Date | null;
+    }[]
+  > {
+    const rows: Record<string, unknown>[] = await this.repo.query(
+      `SELECT d.id, i.issue_date::text AS issue_date, d.status, d.attempt_count, d.retryable,
+              d.error_code, d.error_message, d.next_attempt_at
+         FROM email_delivery d JOIN issue i ON i.id = d.issue_id
+        WHERE d.status IN ('FAILED', 'UNKNOWN')
+        ORDER BY d.updated_at DESC LIMIT $1`,
+      [limit],
+    );
+    return rows.map((r) => ({
+      id: r.id as string,
+      issueDate: r.issue_date as string,
+      status: r.status as string,
+      attempts: Number(r.attempt_count),
+      retryable: Boolean(r.retryable),
+      errorCode: (r.error_code as string | null) ?? null,
+      errorMessage: (r.error_message as string | null) ?? null,
+      nextAttemptAt: r.next_attempt_at ? new Date(r.next_attempt_at as string) : null,
+    }));
+  }
+
   async findById(id: string): Promise<EmailDeliveryModel | null> {
     const entity = await this.repo.findOneBy({ id });
     return entity ? toModel(entity) : null;

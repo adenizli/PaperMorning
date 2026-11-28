@@ -6,6 +6,8 @@ import { GenerationStatus } from '../model/article-variant.model';
 import type { OutlookReportModel } from '../model/outlook-report.model';
 import { OutlookGenerationEntity } from './entity/outlook-generation.entity';
 
+import type { FailedGenerationRow } from './article-variant-repository.service';
+
 export const MAX_OUTLOOK_ATTEMPTS = 3;
 
 /** Technical state of one shared Ufuk Raporu generation (see OutlookGenerationEntity). */
@@ -34,6 +36,27 @@ export class OutlookGenerationRepositoryService {
   async findByFingerprint(fingerprint: string): Promise<OutlookGenerationRecord | null> {
     const entity = await this.repo.findOneBy({ fingerprint });
     return entity ? toRecord(entity) : null;
+  }
+
+  /** Most recent FAILED reports (operator status; read-only). */
+  async listFailed(limit: number): Promise<FailedGenerationRow[]> {
+    const rows: Record<string, unknown>[] = await this.repo.query(
+      `SELECT id, fingerprint, prompt_version, attempt_count, retryable, error_kind, error_message,
+              updated_at
+         FROM outlook_generation WHERE status = 'FAILED'
+        ORDER BY updated_at DESC LIMIT $1`,
+      [limit],
+    );
+    return rows.map((r) => ({
+      id: r.id as string,
+      label: (r.fingerprint as string).slice(0, 12),
+      promptVersion: r.prompt_version as string,
+      attempts: Number(r.attempt_count),
+      retryable: Boolean(r.retryable),
+      errorKind: (r.error_kind as string | null) ?? null,
+      errorMessage: (r.error_message as string | null) ?? null,
+      updatedAt: new Date(r.updated_at as string),
+    }));
   }
 
   async findById(id: string): Promise<OutlookGenerationRecord | null> {
