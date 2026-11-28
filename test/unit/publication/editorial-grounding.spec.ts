@@ -25,6 +25,13 @@ import {
   NINE_OF_TEN_TITLE,
   NINE_OF_TEN_UNSUPPORTED_TR,
 } from '../../fixtures/nine-of-ten.fixture';
+import {
+  ROLLOUTS_ABSTRACT,
+  ROLLOUTS_ARTICLE_TR,
+  ROLLOUTS_TITLE,
+  THIRTY_TWO_ABSTRACT,
+  THIRTY_TWO_TITLE,
+} from '../../fixtures/numeric-grounding.fixture';
 
 function view(overrides: Partial<ResearchPaperView> = {}): ResearchPaperView {
   return {
@@ -192,6 +199,139 @@ describe('analysis validation catches the same error for newly written analyses'
         true,
       ),
     ).not.toThrow();
+  });
+});
+
+describe('numeric grounding by value (Geveze 2026-11-28 false positives)', () => {
+  const analysisOf = (statement: string) => ({
+    summary: 'A systematic review of learned manipulation policies in clinical robotics.',
+    problem: 'Evidence on learned manipulation in clinical robotics is scattered.',
+    priorApproach: 'The abstract does not describe earlier reviews.',
+    contribution: 'A systematic review of the literature.',
+    methods: 'Systematic search of five databases.',
+    findings: [{ statement, evidence: 'Stated in the abstract.' }],
+    limitations: ['Abstract only.'],
+    keyTerms: [],
+    openQuestions: [],
+  });
+  const reviewSource = `${THIRTY_TWO_TITLE}\n${THIRTY_TWO_ABSTRACT}`;
+
+  it('analysis: "32" is grounded by "Thirty-two studies met the inclusion criteria"', () => {
+    const content = validateAnalysisOutput(
+      analysisOf('32 studies met the inclusion criteria.'),
+      reviewSource,
+      true,
+    );
+    expect(content.findings[0].statement).toBe('32 studies met the inclusion criteria.');
+  });
+
+  it('analysis: a different count is still rejected, naming the field and nearby text', () => {
+    expect(() =>
+      validateAnalysisOutput(
+        analysisOf('33 studies met the inclusion criteria.'),
+        reviewSource,
+        true,
+      ),
+    ).toThrow(
+      'Numbers not present in the source text: 33 [findings[0].statement: "33 studies met the inclusion criteria."]',
+    );
+  });
+
+  const rollouts = (): ResearchPaperView =>
+    view({
+      title: ROLLOUTS_TITLE,
+      abstract: ROLLOUTS_ABSTRACT,
+      analysis: {
+        summary: 'A simulation benchmark evaluated over 470,000 rollouts of generalist policies.',
+        problem: 'Real-world evaluation of robot policies is slow and costly.',
+        priorApproach: 'The abstract does not describe earlier benchmarks in detail.',
+        contribution: 'A simulation benchmark built from real-world scenes.',
+        methods: 'Large-scale simulated rollouts across policies and tasks.',
+        findings: [
+          {
+            statement: 'Simulated and real success rates correlate, mean error 4.2 points.',
+            evidence: 'Stated in the abstract.',
+          },
+        ],
+        limitations: ['Abstract only.'],
+        keyTerms: [],
+        openQuestions: [],
+      },
+    });
+
+  it('article: Turkish "470.000" and "470 binden fazla" are grounded by "over 470,000 rollouts"', () => {
+    const content = validateArticle(
+      articleWith(ROLLOUTS_ARTICLE_TR),
+      groundingSourcesOf(rollouts()),
+    );
+    expect(content.sections.find((s) => s.key === 'evidence')!.body).toBe(ROLLOUTS_ARTICLE_TR);
+  });
+
+  it('article: a standalone "470" is a different quantity and is rejected with its location', () => {
+    let message = '';
+    try {
+      validateArticle(
+        articleWith('Yazarlar 470 deneme koşusunu değerlendiriyor.'),
+        groundingSourcesOf(rollouts()),
+      );
+    } catch (error) {
+      expect(error).toBeInstanceOf(PublicationError);
+      expect((error as PublicationError).kind).toBe('VALIDATION_FAILED');
+      message = (error as Error).message;
+    }
+    expect(message).toBe(
+      'Article output invalid: numbers not present in the analysis/abstract: 470 ' +
+        '[sections[evidence].body: "Yazarlar 470 deneme koşusunu değerlendiriyor."]',
+    );
+  });
+
+  it('article: decimal and range equivalence, but no invented values', () => {
+    const sources = groundingSourcesOf(rollouts());
+    expect(() => validateArticle(articleWith('Ortalama hata 4,2 puan.'), sources)).not.toThrow();
+    expect(() => validateArticle(articleWith('Ortalama hata 4.200 puan.'), sources)).toThrow(
+      /numbers not present in the analysis\/abstract: 4\.200 /,
+    );
+    expect(() =>
+      validateArticle(articleWith('Konum hatası %75 azaldı.'), groundingSourcesOf(view())),
+    ).toThrow(/numbers not present.*: 75 \[sections\[evidence\]\.body/);
+    expect(() =>
+      validateArticle(articleWith('Konum hatası %15–60 azaldı.'), groundingSourcesOf(view())),
+    ).not.toThrow();
+  });
+
+  it('numeric equivalence does not bypass the unreported-combination check', () => {
+    // "on kombinasyonun dokuzunda" is grounded by value; the conclusion about the tenth is not.
+    expect(() =>
+      validateArticle(
+        articleWith(`${REPORTED} ${NINE_OF_TEN_UNSUPPORTED_TR}`),
+        groundingSourcesOf(view()),
+      ),
+    ).toThrow(/9\/10 reported/);
+  });
+
+  it('outlook: Turkish forms are compared by value; citation keys are not numbers', () => {
+    const base = cannedOutlook(['P1']);
+    const report = validateOutlook(
+      {
+        ...base,
+        evidence: [
+          { statement: 'Yazarlar 470 binden fazla koşu değerlendiriyor.', paperKeys: ['P1'] },
+        ],
+      },
+      [{ paperKey: 'P1', view: rollouts() }],
+      { fingerprint: 'f'.repeat(64), model: 'claude-sonnet-5-5' },
+    );
+    expect(report.evidence[0].statement).toContain('470 binden');
+    expect(() =>
+      validateOutlook(
+        {
+          ...base,
+          evidence: [{ statement: 'Yazarlar 470 koşu değerlendiriyor.', paperKeys: ['P1'] }],
+        },
+        [{ paperKey: 'P1', view: rollouts() }],
+        { fingerprint: 'f'.repeat(64), model: 'claude-sonnet-5-5' },
+      ),
+    ).toThrow(/numbers not present in the analyses: 470 \[evidence\[0\]\.statement:/);
   });
 });
 

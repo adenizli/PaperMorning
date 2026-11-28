@@ -132,7 +132,7 @@ let counter = 0;
 export async function seedAnalyzedPaper(
   app: INestApplication,
   topicKey: string,
-  overrides: { title?: string; publishedAt?: string } = {},
+  overrides: { title?: string; publishedAt?: string; abstractSuffix?: string } = {},
 ): Promise<{ versionId: string; analysisId: string; paperId: string }> {
   counter++;
   const topic = findTopic(topicKey)!;
@@ -145,7 +145,7 @@ export async function seedAnalyzedPaper(
       categories: topic.arxivCategories,
       publishedAt: overrides.publishedAt ?? '2026-11-20',
       landingUrl: `https://arxiv.org/abs/${id}v1`,
-      abstract: `We study ${topic.keywords[0]} in setting ${counter}. On 12 tasks it reduces training compute by 35% compared with a strong baseline while matching success rates.`,
+      abstract: `We study ${topic.keywords[0]} in setting ${counter}. On 12 tasks it reduces training compute by 35% compared with a strong baseline while matching success rates.${overrides.abstractSuffix ?? ''}`,
     }),
   );
   await app.get(PaperScreeningService).screen(topic, [version.id], 50);

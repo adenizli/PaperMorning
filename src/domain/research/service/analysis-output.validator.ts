@@ -1,5 +1,9 @@
 import { findAbsenceInferences } from '../../../common/text/evidence-grounding';
-import { findUnsupportedNumbers } from '../../../common/text/numeric-claims';
+import {
+  describeUnsupportedClaims,
+  findUnsupportedNumericClaims,
+  textFields,
+} from '../../../common/text/numeric-claims';
 import type { PaperAnalysisContent } from '../model/paper-analysis.model';
 
 export class AnalysisValidationError extends Error {
@@ -28,7 +32,8 @@ const arr = (value: unknown, field: string, min: number, max: number): unknown[]
 
 /**
  * Validates structured Claude output before it may be stored as shared scientific analysis.
- * Rejects missing structure and any number that does not appear in the source text.
+ * Rejects missing structure and any quantity the source text does not state (compared by value:
+ * "Thirty-two" in the abstract supports "32" in the analysis).
  */
 export function validateAnalysisOutput(
   data: unknown,
@@ -66,11 +71,10 @@ export function validateAnalysisOutput(
     ),
   };
 
-  const generated = JSON.stringify(content);
-  const unsupported = findUnsupportedNumbers(generated, sourceText);
+  const unsupported = findUnsupportedNumericClaims(textFields(content), sourceText, 'en');
   if (unsupported.length > 0) {
     throw new AnalysisValidationError(
-      `Numbers not present in the source text: ${unsupported.slice(0, 5).join(', ')}`,
+      `Numbers not present in the source text: ${describeUnsupportedClaims(unsupported)}`,
     );
   }
   // Deterministic only (no prompt change): applies to newly written analyses; cached analyses

@@ -4,7 +4,11 @@ import { ClaimLostError } from '../../../common/persistence/claim-lost.error';
 import { AppConfig } from '../../../config/app.config';
 import { fingerprint } from '../../../common/text/fingerprint';
 import { findAbsenceInferences } from '../../../common/text/evidence-grounding';
-import { findUnsupportedNumbers } from '../../../common/text/numeric-claims';
+import {
+  describeUnsupportedClaims,
+  findUnsupportedNumericClaims,
+  textFields,
+} from '../../../common/text/numeric-claims';
 import { LlmService } from '../../../service/llm/llm.service';
 import { LlmTask } from '../../../service/llm/llm.types';
 import type { KnowledgeLevel } from '../../account';
@@ -518,10 +522,14 @@ export function validateOutlook(
   const source = papers
     .map((p) => `${p.view.title}\n${p.view.abstract ?? ''}\n${JSON.stringify(p.view.analysis)}`)
     .join('\n');
-  const generated = JSON.stringify({ ...report, fingerprint: '', model: '', promptVersion: '' });
-  const unsupported = findUnsupportedNumbers(generated, source);
+  // Citation keys ("P1") and metadata are not claims; the Turkish report is compared by value.
+  const generated = textFields(
+    report,
+    new Set(['paperKeys', 'fingerprint', 'model', 'promptVersion', 'mode']),
+  );
+  const unsupported = findUnsupportedNumericClaims(generated, source, 'tr');
   if (unsupported.length > 0)
-    fail(`numbers not present in the analyses: ${unsupported.slice(0, 5).join(', ')}`);
+    fail(`numbers not present in the analyses: ${describeUnsupportedClaims(unsupported)}`);
   // Statements about unreported cases: the abstract is the authority for abstract-only analyses.
   const statementSource = papers
     .map((p) =>

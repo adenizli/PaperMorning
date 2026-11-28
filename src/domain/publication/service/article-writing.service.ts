@@ -4,7 +4,11 @@ import { AppConfig } from '../../../config/app.config';
 import { ContentCoverage, PublicationStatus } from '../../../common/enum/research.enum';
 import { fingerprint } from '../../../common/text/fingerprint';
 import { findAbsenceInferences } from '../../../common/text/evidence-grounding';
-import { findUnsupportedNumbers } from '../../../common/text/numeric-claims';
+import {
+  describeUnsupportedClaims,
+  findUnsupportedNumericClaims,
+  textFields,
+} from '../../../common/text/numeric-claims';
 import { LlmService } from '../../../service/llm/llm.service';
 import { LlmTask } from '../../../service/llm/llm.types';
 import { KnowledgeLevel } from '../../account';
@@ -170,7 +174,7 @@ export class ArticleWritingService {
         maxTokens: 8000,
         prompt: buildArticlePrompt(view, level),
       });
-      const content = validateArticle(result.data, groundingSourcesOf(view));
+      const content = validateArticle(result.data, groundingSourcesOf(view), language);
       return await this.variants.complete(claim.variant.id, claim.claimToken, {
         content,
         model: result.model,
@@ -285,6 +289,7 @@ export function buildArticlePrompt(view: ResearchPaperView, level: KnowledgeLeve
 export function validateArticle(
   data: unknown,
   sources: { numbers: string; statements: string },
+  language = 'tr',
 ): ArticleContent {
   const fail = (message: string): never => {
     throw new PublicationError('VALIDATION_FAILED', `Article output invalid: ${message}`, true);
@@ -324,9 +329,14 @@ export function validateArticle(
       .slice(0, MAX_NOT_REPORTED)
       .map((item) => item.trim().slice(0, 300)),
   };
-  const unsupported = findUnsupportedNumbers(JSON.stringify(content), sources.numbers);
+  // Turkish output ("470.000", "470 bin", "42,8") is compared by value with the English source.
+  const unsupported = findUnsupportedNumericClaims(
+    textFields(content),
+    sources.numbers,
+    language === 'tr' ? 'tr' : 'en',
+  );
   if (unsupported.length > 0)
-    fail(`numbers not present in the analysis/abstract: ${unsupported.slice(0, 5).join(', ')}`);
+    fail(`numbers not present in the analysis/abstract: ${describeUnsupportedClaims(unsupported)}`);
   const absence = findAbsenceInferences(articleTexts(content), sources.statements);
   if (absence.length > 0) {
     fail(

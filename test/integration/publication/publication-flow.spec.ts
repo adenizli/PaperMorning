@@ -10,6 +10,7 @@ import {
   InMemoryFileStorage,
 } from '../../support/fake-integrations';
 import {
+  cannedArticle,
   cannedOutlook,
   createReader,
   routingHandler,
@@ -229,6 +230,62 @@ describe('PublicationService (PostgreSQL)', () => {
         await db.query(`SELECT count(*)::int AS n FROM article_variant WHERE status = 'COMPLETED'`)
       )[0].n,
     ).toBe(3);
+  });
+
+  it('a VALIDATION_FAILED article is retried on the same variant row from the WRITING checkpoint', async () => {
+    // Mirrors the 2026-11-28 failure: a validation-only fix keeps the article fingerprint (no
+    // prompt bump), so the failed variant row is reclaimed and the run resumes from its checkpoint.
+    await seedAnalyzedPaper(app, 'robotics', {
+      abstractSuffix: ' We evaluate over 470,000 rollouts.',
+    });
+    const articleWith = (evidence: string) => {
+      const data = cannedArticle();
+      (data.sections as { key: string; body: string }[]).find((s) => s.key === 'evidence')!.body =
+        evidence;
+      return { data };
+    };
+    let articleCalls = 0;
+    fake.handler = routingHandler({
+      ARTICLE: () =>
+        ++articleCalls === 1
+          ? articleWith('Yazarlar 470 deneme koşusunu değerlendiriyor.') // a different quantity
+          : articleWith('Yazarlar 470.000 koşuyu, yani 470 binden fazla denemeyi değerlendiriyor.'),
+    });
+    const reader = await createReader(app, 'reader_retry', [
+      { topicKey: 'robotics', priority: HIGH, knowledgeLevel: BEGINNER },
+    ]);
+    const analysesBefore = calls('ANALYSIS');
+
+    const failed = await app.get(PublicationService).prepareIssue(reader, DATE);
+    expect(failed).toMatchObject({ outcome: 'FAILED' });
+    expect(failed.run).toMatchObject({ stage: 'WRITING', status: 'FAILED', retryable: true });
+    expect(failed.reason).toMatch(
+      /^VALIDATION_FAILED: .*numbers not present in the analysis\/abstract: 470 \[sections\[evidence\]\.body: /,
+    );
+    const [variantBefore] = await db.query(
+      `SELECT id, generation_fingerprint, status, attempt_count, retryable FROM article_variant`,
+    );
+    expect(variantBefore).toMatchObject({ status: 'FAILED', attempt_count: 1, retryable: true });
+    const selection = failed.run!.checkpoint.selection;
+
+    await db.query(`UPDATE publication_run SET next_attempt_at = now() - interval '1 second'`);
+    const resumed = await app.get(PublicationService).prepareIssue(reader, DATE);
+    expect(resumed.outcome).toBe('READY');
+    expect(resumed.run).toMatchObject({ attemptCount: 2, status: 'COMPLETED' });
+    expect(resumed.run!.checkpoint.selection).toEqual(selection);
+    const variants = await db.query(
+      `SELECT id, generation_fingerprint, status, attempt_count FROM article_variant`,
+    );
+    expect(variants).toEqual([
+      {
+        id: variantBefore.id,
+        generation_fingerprint: variantBefore.generation_fingerprint,
+        status: 'COMPLETED',
+        attempt_count: 2,
+      },
+    ]);
+    expect(articleCalls).toBe(2);
+    expect(calls('ANALYSIS')).toBe(analysesBefore); // the shared analysis is not repaid
   });
 
   it('never marks an issue READY when PDF rendering fails, and keeps the frozen snapshot on retry', async () => {
