@@ -11,6 +11,7 @@ import { PreferenceService } from '../../src/domain/account/service/preference.s
 import { AuthService } from '../../src/core/auth/auth.service';
 import { PublicationModule } from '../../src/domain/publication/publication.module';
 import { DeliveryService } from '../../src/domain/publication/service/delivery.service';
+import { OperationsService } from '../../src/domain/publication/service/operations.service';
 import { PublicationService } from '../../src/domain/publication/service/publication.service';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { DailyPublicationScheduler } from '../../src/core/scheduler/daily-publication.scheduler';
@@ -54,13 +55,15 @@ describe('AppModule initialization', () => {
     expect(Reflect.getMetadata('imports', AccountModule)).toHaveLength(1); // only its repository module
   });
 
-  it('wires PublicationModule with six services and exports only the public entrypoints', () => {
+  it('wires PublicationModule with seven services and exports only the public entrypoints', () => {
     expect(app.get(PublicationService)).toBeInstanceOf(PublicationService);
     expect(app.get(DeliveryService)).toBeInstanceOf(DeliveryService);
-    expect(Reflect.getMetadata('providers', PublicationModule)).toHaveLength(6);
+    expect(app.get(OperationsService)).toBeInstanceOf(OperationsService);
+    expect(Reflect.getMetadata('providers', PublicationModule)).toHaveLength(7);
     expect(Reflect.getMetadata('exports', PublicationModule)).toEqual([
       PublicationService,
       DeliveryService,
+      OperationsService, // read-only operator overview (ops:status)
     ]);
   });
 

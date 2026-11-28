@@ -78,7 +78,8 @@ describe('print layout (real Chromium, issue-print-v3)', () => {
     const used = [...new Set(JSON.stringify(content).match(/[çğıöşüÇĞİÖŞÜ]/g))];
     expect(used.length).toBeGreaterThanOrEqual(10);
     for (const letter of used) expect(text).toContain(letter);
-    expect(text).toContain('Özette belirtilmeyenler'.toLocaleUpperCase('tr-TR'));
+    // pdf.js may split the letter-spaced uppercase heading ("ÖZET TE"): compare without spaces.
+    expect(text.replace(/\s+/g, '')).toContain('ÖZETTEBELİRTİLMEYENLER');
     expect(text).toContain('Bu çalışmanın değerlendirmesi');
     // Bookmarks: brand > [headline > sections, report > subsections]; no duplicates per level.
     expect(doc.outline.map((n) => n.title)).toEqual(['PaperMorning']);

@@ -136,6 +136,7 @@ describe('DailyPublicationScheduler (simulated clock, PostgreSQL)', () => {
         env: { RESEARCH_HAIKU_SCREENING: 'false' },
       });
     app = await instance(mail);
+    db = app.get(DataSource);
     const other = await instance(otherMail);
     try {
       const [a, b] = [app, other].map((x) => x.get(DailyPublicationScheduler));

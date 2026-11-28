@@ -141,7 +141,8 @@ describe('multi-paper issue (PostgreSQL + real PDF)', () => {
     const bookmarks = JSON.stringify(doc.outline);
     for (const article of content.articles) expect(bookmarks).toContain(article.headline);
     expect(bookmarks).toContain('Ufuk Raporu');
-    expect(doc.pageTexts.join(' ')).toContain('Özette belirtilmeyenler'.toLocaleUpperCase('tr-TR'));
+    // pdf.js may split the letter-spaced uppercase heading ("ÖZET TE"): compare without spaces.
+    expect(doc.pageTexts.join('').replace(/\s+/g, '')).toContain('ÖZETTEBELİRTİLMEYENLER');
 
     // Spend is recorded and within the daily budget.
     const budget = await app.get(LlmService).budgetStatus();

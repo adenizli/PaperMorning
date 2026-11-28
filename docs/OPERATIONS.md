@@ -1,4 +1,4 @@
-# PaperMorning — İşletim prosedürleri (v1.1)
+# PaperMorning — İşletim prosedürleri (v1.2)
 
 > Operatör için adım adım prosedürler: güncelleme, ücretsiz PDF önizlemesi, kontrollü gerçek yayın, Mailpit ve gerçek SMTP testi, zamanlayıcının kontrollü açılışı. Komutlar Docker Compose kurulumu içindir (`docker compose exec server node dist/bootstrap/cli.js …`); geliştirme ortamında aynı komutlar `npm run cli -- …` ile çalışır.
 
@@ -162,6 +162,8 @@ Bu test, otomatik testlerde de CI'da Mailpit'e karşı çalışır (`test/integr
 
 ## 7. Gerçek SMTP ile uçtan uca test (sağlayıcı seçildikten sonra)
 
+> v1.2: ayrıntılı ve güncel prosedür §13–§14'tedir (`mail:verify`, `mail:test`).
+
 1. `.env`: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` (`starttls`/587 veya `tls`/465), `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` (sağlayıcıda doğrulanmış gönderen), `MAIL_ENABLED=true`. `SCHEDULER_ENABLED=false` kalır.
 2. `docker compose up -d` (yeniden başlatma), sonra `system:check` → `mail.enabled: true`, `smtpHostConfigured: true`, `security` beklenen değer.
 3. Test okurunun adresini operatörün erişebildiği gerçek bir posta kutusu yapın; yalnızca o okurda günlük e-posta açık olsun.
@@ -169,6 +171,8 @@ Bu test, otomatik testlerde de CI'da Mailpit'e karşı çalışır (`test/integr
 5. `UNKNOWN` dönerse otomatik tekrar yoktur: sağlayıcı panelini kontrol edip `delivery:resolve --delivery <id> --as SENT|RETRY`.
 
 ## 8. Zamanlayıcının kontrollü açılışı
+
+> v1.2: son prosedür §16, durdurma/geri alma §17.
 
 1. Önce plan (hiçbir şey yapmaz): `scheduler:plan --at <yarın 06:00 yerel saatin UTC karşılığı>` → okur başına `WOULD_PREPARE`/`NOT_DUE` ve teslim kararı.
 2. **Aşama A — yalnızca hazırlık:** `.env` → `SCHEDULER_ENABLED=true`, `MAIL_ENABLED=false`; `docker compose up -d`. Ertesi sabah `publication:status` ve `llm:usage` ile hazırlığı ve maliyeti kontrol edin. Okurların `dailyEmailEnabled=false` olduğu sürece e-posta gitmez.
@@ -190,7 +194,7 @@ Sayısal denetim (`src/common/text/numeric-claims.ts`) sayıları **değerle** k
 
 Sayıya yapışık harfler türüne göre okunur ve kaynakta **aynı türden** kanıt ister: Türkçe "3B" (üç boyutlu) ile "3D", "3 boyutlu", "three-dimensional" boyuttur; "7B parametre" milyardır. Türkçe "nB" bağlamla ayrılır ("parametre", "token", "$" → milyar; "poz", "görüntü", "nokta bulutu" … → boyut; aksi halde iki okuma da kendi kanıtıyla). Kaynaktaki "3D", "3 milyar"ı veya "3B parametre"yi desteklemez; "128-dimensional", "128 görev"i desteklemez. Ayrık "4 K" ve "300 kelvin" açık sıcaklıktır: yalnızca kaynaktaki kelvin kanıtıyla desteklenir (küçük sayı toleransı yok, "300 tasks" desteklemez); bitişik "4K" binlik veya kelvin olabilir, her okuma kendi kanıtını ister. Kalan, bilerek katı bırakılan belirsizlikler (molar "M", tesla/trilyon "T", "4K video") `numeric-claims.ts` başında listelenmiştir.
 
-Bu yalnızca doğrulama kodudur; prompt ve şema sürümleri (analiz, `article-v2`, `outlook-v2`) **değişmedi**, bu yüzden parmak izleri aynıdır ve başarısız kayıtlar aynı satırda yeniden denenir. Elle veritabanı değişikliği, checkpoint sıfırlama veya kayıt silme gerekmez ve yapılmamalıdır.
+Bu yalnızca doğrulama kodudur; prompt ve şema sürümleri **değişmedi**, bu yüzden parmak izleri aynıdır ve başarısız kayıtlar aynı satırda yeniden denenir. (v1.2 `article-v3`/`outlook-v3`'e geçer: v2 sürümüyle başarısız olmuş bir yazı varyantı v1.2'den sonra yeniden denenmez; gerekirse v3 ile yeni bir varyant yazılır. `ops:status` bunu `retryEligible: false` olarak gösterir.) Elle veritabanı değişikliği, checkpoint sıfırlama veya kayıt silme gerekmez ve yapılmamalıdır.
 
 - **Yazı varyantı** (`article_variant`, `FAILED`, `retryable=true`): bir sonraki hazırlıkta aynı satır yeniden talep edilir, koşul `attempt_count < 3`. Reddedilen çıktı saklanmadığı için bu **bir** yeni Claude yazı çağrısıdır; tamamlanmış diğer varyantlar, analizler ve seçim yeniden ödenmez.
 - **Sayı çalıştırması** (`publication_run`): `WRITING` checkpoint'inden devam eder, `checkpoint.selection` korunur. Koşul: `attempt_count < PUBLICATION_MAX_ATTEMPTS` (varsayılan 5) ve `next_attempt_at` geçmiş olmalı (geri çekilme `10 dk × 2^(deneme−1)`).
@@ -218,3 +222,214 @@ Karar:
 | Varyant `attempt_count = 3` (deneme hakkı bitti) | Çalıştırma her denemede aynı hatayla `WRITING`'de başarısız olur ve çalıştırma hakkını tüketir: **`publication:prepare` çalıştırmayın.** Aynı makale aynı düzey için seçildiği sürece sonraki tarihler de etkilenir. Elle SQL ile sıfırlamayın; operatör kararı gerekir (ayrı, denetimli bir değişiklik). |
 | `publication:status` `MANUAL` | Çalıştırma hakkı bitmiş veya hata kalıcı: tarihi yeniden üretmeyin, yeni sayı yeni tarihtir (bkz. §0). |
 
+
+## 11. v1.2 güncellemesi (Geveze)
+
+v1.2 şema değiştirmez (migration yok). Prompt sürümleri `article-v3` / `outlook-v3`, PDF şablonu `issue-print-v3` olur. Yayımlanmış sayılar ve PDF'leri değişmez.
+
+**Ne zaman:** hazırlığı süren bir sayı yokken (ör. 08:00'den sonra veya akşam). Yarım kalmış bir çalıştırma güncellemeden sonra devam ederse, yeni prompt sürümü yeni parmak izi demektir: o sayının yazıları v3 ile yeniden yazılır (ücretli). Önce kontrol edin:
+
+```bash
+cd <papermorning-dizini>
+docker compose exec -T server node dist/bootstrap/cli.js publication:status --user <okur> --date "$(TZ=Europe/Istanbul date +%F)" | jq '{state, next}'
+```
+
+`state` `READY` veya `NOT_STARTED` olmalı. Sonra §2'deki adımlar (yayımlanmış sayıların listesi → `issues-before.txt`, `pg_dump` + `/data` yedeği) ve:
+
+```bash
+git fetch origin && git checkout main && git pull --ff-only
+git log --oneline -1                      # beklenen: v1.2 birleştirme commit'i
+docker compose build server
+docker compose up -d
+docker compose logs --tail=80 server | grep -E "migrations|PDF template|Nest application successfully started"
+```
+
+Beklenen: `No migrations are pending`, `PDF template issue-print-v3; Chromium sandbox OFF (explicit, runtime container)`.
+
+Doğrulama (hiçbiri Claude çağırmaz, e-posta göndermez):
+
+```bash
+docker compose exec -T server node dist/bootstrap/cli.js system:check | jq '{scheduler, mail, llm: {dailyBudgetUsd: .llm.dailyBudgetUsd}, pdf}'
+docker compose exec -T server node dist/bootstrap/cli.js pdf:smoke | jq '{outcome, template, pages}'
+docker compose exec -T server node dist/bootstrap/cli.js ops:status | jq '{scheduler, mail, llm}'
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "SELECT id, issue_date, status, content_hash, pdf_storage_key, pdf_sha256, pdf_size_bytes, published_at FROM issue ORDER BY issue_date, id"' > issues-after.txt
+diff issues-before.txt issues-after.txt && echo "published issues unchanged"
+```
+
+Beklenen: `scheduler.enabledInServer: false`, `mail.enabled: false`, `dailyBudgetUsd: 2`, `pdf:smoke` `OK` ve `issue-print-v3`, `diff` çıktısız. 2026-11-26 ve 2026-11-28 sayıları (`5dcbd2e7-b334-4152-80e2-2413c9596285`) aynen kalır.
+
+## 12. Günlük durum: `ops:status`
+
+Tek salt okunur komut; yazmaz, Claude çağırmaz, e-posta göndermez:
+
+```bash
+docker compose exec -T server node dist/bootstrap/cli.js ops:status | jq .
+docker compose exec -T server node dist/bootstrap/cli.js ops:status --user <okur> | jq '.readers[0] | {issueDate, localTime, state: .today.state, next: .today.next, nextPreparationAt, nextDeliveryAt, latestReady, latestSent}'
+```
+
+| Alan | Anlamı |
+|---|---|
+| `scheduler.enabledInServer`, `mail.enabled` | Sunucunun gerçek ayarı (CLI kendi sürecinde zamanlayıcıyı hep kapatır; burada gösterilen sunucunun değeridir) |
+| `llm` | UTC günü bütçesi: `spentUsd` (kesinleşen), `inFlightUsd` (süren çağrıların en kötü durum rezervasyonu), `remainingUsd`, `resetsAt` (UTC gece yarısı = 03:00 İstanbul) |
+| `readers[].issueDate`, `localTime` | Okurun yerel "bugün"ü ve saati (sayı kimliği budur) |
+| `readers[].preparationWindow` | Otomatik hazırlığın çalıştığı aralık (06:00 → 08:00 + geç pencere) |
+| `readers[].nextPreparationAt`, `nextDeliveryAt` | Bir sonraki 06:00 ve 08:00'in UTC karşılığı (DST dahil) |
+| `readers[].today` | `publication:status` ile aynı: `state`, `run` (deneme, hata, bir sonraki deneme), `delivery`, `next.action` (`NONE`/`PREPARE`/`WAIT`/`MANUAL`) |
+| `readers[].latestReady`, `latestSent` | En son READY sayı ve en son gönderilen e-posta |
+| `failures.analyses`, `articleVariants`, `outlooks` | Son başarısız üretimler: `attempts`/`maxAttempts`, `retryEligible` (yeniden denenecek mi: tekrar denenebilir, hak var, güncel prompt sürümü), hata türü ve kısaltılmış mesaj |
+| `failures.deliveries` | `FAILED`/`UNKNOWN` teslimler ve sıradaki adım (`AUTOMATIC_RETRY`, `NONE`, `OPERATOR_RESOLVE`) |
+
+Zamanlayıcı logları: `docker compose logs --since 24h server | grep -E "DailyPublicationScheduler|DeliveryService|Article variant|Outlook"` → `Issue <okur>/<tarih> READY (<id>)`, `Delivery <okur>/<tarih> SENT`, başarısızlıkta deneme numarası ve bir sonraki denemenin zamanı.
+
+## 13. SMTP yapılandırması (Geveze)
+
+Sağlayıcı seçimi operatöre aittir; kimlik bilgileri yalnızca Geveze'deki `.env` dosyasında durur (repo'ya, GitHub'a, sohbete veya loglara girmez). Kişisel pilot için önerilen: **Gmail + uygulama şifresi** (ücretsiz, günde yüzlerce ileti, TLS). Alan adınız varsa bir işlem e-postası sağlayıcısı (Brevo, Postmark, Amazon SES) teslim edilebilirlik için daha iyidir.
+
+**A) Gmail (önerilen pilot):** Google hesabında 2 adımlı doğrulama açık olmalı → Hesap → Güvenlik → Uygulama şifreleri → "PaperMorning" adlı 16 karakterlik şifre. Gönderen adres o Gmail adresi olmalı (Gmail başka bir `From`'u yeniden yazar).
+
+```dotenv
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=tls
+SMTP_USER=<gmail-adresiniz>
+SMTP_PASSWORD=<16 karakterlik uygulama şifresi, boşluksuz>
+SMTP_FROM=PaperMorning <gmail-adresiniz>
+SMTP_REPLY_TO=
+SMTP_ALLOW_INSECURE=false
+MAIL_ENABLED=false
+```
+
+**B) İşlem e-postası sağlayıcısı (ör. Brevo):** sağlayıcıda gönderen adresi/alan adını doğrulayın (SPF/DKIM). `SMTP_HOST=smtp-relay.brevo.com`, `SMTP_PORT=587`, `SMTP_SECURE=starttls`, `SMTP_USER`/`SMTP_PASSWORD` sağlayıcının SMTP kimlik bilgileri, `SMTP_FROM` doğrulanmış gönderen. Postmark: `smtp.postmarkapp.com`, 587, `starttls`; Amazon SES: `email-smtp.<bölge>.amazonaws.com`, 587, `starttls`.
+
+Kurulum:
+
+```bash
+cd <papermorning-dizini>
+cp .env .env.bak-$(date +%F) && chmod 600 .env .env.bak-*
+nano .env                      # yukarıdaki satırları girin; şifreyi komut satırına/geçmişe yazmayın
+docker compose up -d           # .env değişince sunucu konteyneri yeniden oluşturulur
+docker compose exec -T server node dist/bootstrap/cli.js system:check | jq '.mail'
+docker compose exec -T server node dist/bootstrap/cli.js mail:verify | jq .; echo "exit=$?"
+```
+
+- `system:check` sırları yazmaz: yalnızca `smtpHostConfigured`, `authConfigured`, `fromConfigured`, `security`.
+- `mail:verify` sunucuya bağlanır, TLS'i (sertifika doğrulamalı, en az TLS 1.2) ve AUTH'u dener, **ileti göndermez**; `MAIL_ENABLED=false` iken de çalışır. `exit=0` → hazır. `exit=1` → `error` alanı (şifresiz): `EAUTH` kimlik bilgisi, `ETIMEDOUT`/`ECONNECTION` port engeli (bazı sunucular 465/587 çıkışını kapatır), `ESOCKET`/sertifika TLS ayarı.
+- `docker compose config` çıktısı sırları içerir; paylaşmayın.
+- Üretimde düz metin SMTP (`SMTP_SECURE=none`) ve `SMTP_ALLOW_INSECURE=true` reddedilir.
+
+## 14. Kontrollü test e-postası
+
+**Adım 1 — sentetik ileti (okur ve sayı yok, veritabanı yazması yok):** `MAIL_ENABLED=true` gerekir; zamanlayıcı kapalı kaldığı sürece hiçbir şey otomatik gönderilmez.
+
+```bash
+sed -i 's/^MAIL_ENABLED=.*/MAIL_ENABLED=true/' .env && grep -E '^(MAIL_ENABLED|SCHEDULER_ENABLED)=' .env
+docker compose up -d
+docker compose exec -T server node dist/bootstrap/cli.js mail:test --to <kendi-adresiniz> | jq .; echo "exit=$?"
+```
+
+Beklenen: `outcome: "SENT"`, `messageId`, `attachment.sha256`, `databaseWrites: 0`. Posta kutusunda (spam dahil): konu `PaperMorning SMTP testi — çğıöşü ÇĞİÖŞÜ`, gövdede aynı harfler, ekte `PaperMorning-SMTP-testi.pdf` (her sayfada "PDF duman testi" etiketi ve Türkçe harfler). `--to` tek bir düz adres kabul eder; liste veya `İsim <adres>` reddedilir.
+
+**Adım 2 — gerçek sayı, tek okur:** kendi hesabınızda günlük e-postayı açın ve READY bir sayıyı (ör. 2026-11-28) gönderin. Sayı ve PDF değişmez; yalnızca bir `email_delivery` kaydı oluşur.
+
+```bash
+curl -fsS -c jar -H 'Content-Type: application/json' \
+  -d '{"identifier":"<okur>","password":"<şifre>"}' http://127.0.0.1:3000/api/auth/login >/dev/null
+curl -fsS -b jar http://127.0.0.1:3000/api/preferences > prefs.json
+jq '{language: .reader.language, timezone: .reader.timezone, dailyEmailEnabled: true, topics: [.topics[] | {topicKey, priority, knowledgeLevel}]}' prefs.json > prefs-on.json
+curl -fsS -b jar -X PUT -H 'Content-Type: application/json' --data @prefs-on.json http://127.0.0.1:3000/api/preferences | jq '{reader}'
+rm jar
+docker compose exec -T server node dist/bootstrap/cli.js delivery:send --user <okur> --date 2026-11-28 | jq .; echo "exit=$?"
+docker compose exec -T server node dist/bootstrap/cli.js delivery:send --user <okur> --date 2026-11-28 | jq '{outcome}'   # ALREADY_SENT
+```
+
+`timezone` `Europe/Istanbul` olmalı (`jq '.reader.timezone' prefs.json`). Beklenen: ilk gönderim `SENT` (exit 0), ikincisi `ALREADY_SENT`; posta kutusunda tek ileti, konu `PaperMorning · 28 Kasım 2026 — <kapak başlığı>`, ek `PaperMorning-2026-11-28.pdf`. Ekin SHA-256'sı `publication:status --user <okur> --date 2026-11-28 | jq -r .issue.pdf.sha256` ile aynı olmalı (`sha256sum PaperMorning-2026-11-28.pdf`).
+
+`UNKNOWN` (exit 1) → otomatik tekrar yok; sağlayıcının gönderilenler/aktivite panelini kontrol edip `delivery:resolve --delivery <id> --as SENT|RETRY`. Test bitince zamanlayıcıyı açana kadar `MAIL_ENABLED=false` yapabilirsiniz (§16).
+
+## 15. Kontrollü çok makaleli yayın (gerçek üretim)
+
+Amaç: aynı alanda en az üç farklı çalışmalı bir sayıyı, zamanlayıcıyı açmadan, elle hazırlamak. Bu, o tarihin gerçek sayısıdır (yeni metin = yeni tarih); sonraki sabah zamanlayıcı hazır sayıyı yeniden üretmez.
+
+**Maliyet tahmini** (Sonnet 5.5, $2/M girdi, $10/M çıktı): analiz ≈ $0.02, yazı ≈ $0.04–0.05, çok makaleli Ufuk Raporu ≈ $0.05–0.07, Haiku eleme ≈ $0.003/gün. 3 yeni makaleli sayı ≈ **$0.25–0.35**, 6 makaleli ≈ **$0.45–0.60**; her `VALIDATION_FAILED` yeniden denemesi bir yazı daha (≈ $0.05). $2 günlük bütçe yeterlidir ve aşılamaz. Gerçek değeri 2026-11-28'in maliyetiyle kalibre edin: `llm:usage --date 2026-11-28`. Pilot için sayı başına makale sayısını sınırlamak isterseniz `.env`'de `PUBLICATION_MAX_ARTICLES=4`.
+
+```bash
+D=2026-11-29                       # okurun henüz sayısı olmayan bir sonraki yerel tarihi
+docker compose exec -T server node dist/bootstrap/cli.js ops:status --user <okur> | jq '{llm, today: .readers[0].today.state}'
+docker compose exec -T server node dist/bootstrap/cli.js research:run --topics robotics --date $D | jq '.runs[] | {status, counts}'
+docker compose exec -T server node dist/bootstrap/cli.js publication:prepare --user <okur> --date $D > prepare-$D.json; echo "exit=$?"
+jq '{outcome, reason, issueId, retry}' prepare-$D.json
+docker compose exec -T server node dist/bootstrap/cli.js llm:usage --date "$(date -u +%F)" | jq '.usage'
+```
+
+- `research:run` önce adayları bulur ve analiz eder (`counts.candidates`, `analyzed`, `reused`); `publication:prepare` bunu zaten yapar, önden çalıştırmak yalnızca aday sayısını görmek içindir. Daha önce bu okura yayımlanmış makaleler (ve aynı başlıklı ön baskı/dergi sürümleri) seçilmez. Son 7 günde 3'ten az uygun çalışma varsa sayı daha az makale içerir; bu bir hata değildir.
+- `exit=1` → `publication:status --user <okur> --date $D | jq '{run, next}'`. Bir yazı başarısızsa tamamlanan yazılar ve analizler korunur; `next.at` sonrasında aynı `publication:prepare` komutu kaldığı yerden devam eder (yalnızca eksik yazı yeniden yazılır).
+
+İnceleme (PDF'i §5'teki gibi indirin):
+
+```bash
+docker compose exec -T server node dist/bootstrap/cli.js publication:status --user <okur> --date $D | jq '{state, issue: .issue.id, pages: .issue.pdf}'
+```
+
+PDF kontrol listesi: kapakta "Bu sayıda" içindekiler listesi; her makale ayrı başlıkla ve kaynak kartıyla; yer imleri (bookmarks) her makaleye ve Ufuk Raporu'na gidiyor; "Özette belirtilmeyenler" kutuları; Ufuk Raporu'nda **İlişki/Uyuşma/Ayrışma** maddeleri en az iki makaleye atıf yapıyor, "Boşluk:" maddeleri belirsizliklerde, "alan uzlaştı" gibi genelleme yok; her atıf (P1, P2, …) bu sayının bir makalesine karşılık geliyor; özette olmayan bir konu "bu çalışmada ele alınmıyor" değil "özette ele alınmıyor" diye yazılmış.
+
+## 16. Zamanlayıcının üretimde açılması (son prosedür)
+
+**Önkoşullar:** §11 doğrulaması temiz; `mail:verify` exit 0; §14 iki adım da tamam; §15 sayısı READY ve incelendi; `ops:status` → `failures` içinde `retryEligible` bekleyen kritik bir kayıt yok; okurun `timezone`'u `Europe/Istanbul`; `.env`'de `LLM_DAILY_BUDGET_USD=2`, `SCHEDULER_PREPARE_LOCAL_TIME=06:00` (teslim 08:00 sabittir), `SCHEDULER_LATE_WINDOW_MINUTES=120`.
+
+Kurallar (kodda sabit): hazırlık her dakika denetlenir ve yerel 06:00'dan 08:00 + geç pencereye (10:00) kadar otomatik çalışır; READY sayı yeniden hazırlanmaz; e-posta yalnızca READY ve doğrulanmış PDF'li sayı için, yalnızca açık abone okura, okur/gün başına en fazla bir kez gider. 08:00'de hazır değilse gecikme kaydedilir ve 10:00'a kadar hazır olursa geç gönderilir; 10:00'dan sonra o gün için otomatik hazırlık ve e-posta yoktur (sayı CLI ile web için hazırlanabilir). Kesinti sonrası: sunucu geri geldiğinde o günün penceresi açıksa kaldığı yerden devam eder; geçmiş günler otomatik telafi edilmez. Bütçe dolarsa Claude'a istek gitmez, deneme geri çekilmeyle en fazla `PUBLICATION_MAX_ATTEMPTS` kez yapılır. `UNKNOWN` teslim asla otomatik tekrarlanmaz.
+
+**Aşama A — yalnızca hazırlık (1–2 gün):** okurun günlük e-postası kapalı (§14 adım 2'deki `jq`'da `dailyEmailEnabled: false`).
+
+```bash
+docker compose exec -T server node dist/bootstrap/cli.js scheduler:plan --at "$(date -u -d "$(TZ=Europe/Istanbul date -d 'tomorrow 06:00' --iso-8601=seconds)" +%FT%TZ)" | jq '.readers'
+sed -i 's/^SCHEDULER_ENABLED=.*/SCHEDULER_ENABLED=true/' .env && grep -E '^(SCHEDULER_ENABLED|MAIL_ENABLED|LLM_DAILY_BUDGET_USD|SCHEDULER_PREPARE_LOCAL_TIME)=' .env
+docker compose up -d
+docker compose exec -T server node dist/bootstrap/cli.js ops:status | jq '{scheduler, readers: [.readers[] | {user, nextPreparationAt, nextDeliveryAt}]}'
+```
+
+Ertesi sabah ~06:30 ve ~08:05: `ops:status --user <okur>` → `today.state: READY`, `llm.spentUsd` beklenen aralıkta; loglarda `Issue <id>/<tarih> READY`.
+
+**Aşama B — e-posta:** `MAIL_ENABLED=true` (`docker compose up -d`) ve okurun günlük e-postasını açın (§14 adım 2, `dailyEmailEnabled: true`). Ertesi gün 08:00'de tek e-posta beklenir; 08:05'te `ops:status` → `latestSent.issueDate` bugünün tarihi, loglarda `Delivery <okur>/<tarih> SENT`.
+
+Zamanlayıcı tek sunucu sürecinde çalışır. Yanlışlıkla iki sunucu çalışsa bile hazırlık, render ve e-posta PostgreSQL claim'leriyle okur/gün başına bir kez yapılır (test edildi); yine de tek sunucu çalıştırın.
+
+## 17. Geri alma ve acil durdurma
+
+| Amaç | Komut | Etki |
+|---|---|---|
+| Bir okura e-postayı hemen durdur (yeniden başlatmasız) | §14 adım 2, `dailyEmailEnabled: false` | Bir sonraki dakikadan itibaren o okura gönderim yok |
+| Tüm e-postayı durdur | `sed -i 's/^MAIL_ENABLED=.*/MAIL_ENABLED=false/' .env && docker compose up -d` | Teslimler `DISABLED`; hazırlık sürer |
+| Zamanlayıcıyı durdur | `sed -i 's/^SCHEDULER_ENABLED=.*/SCHEDULER_ENABLED=false/' .env && docker compose up -d` | Otomatik hazırlık/e-posta yok; CLI çalışır |
+| Tüm Claude harcamasını durdur | `sed -i 's/^LLM_DAILY_BUDGET_USD=.*/LLM_DAILY_BUDGET_USD=0/' .env && docker compose up -d` | Her istek bütçe kontrolünde reddedilir (`BUDGET_EXCEEDED`), ücret yok |
+| Her şeyi durdur | `docker compose stop server` | Veritabanı ve PDF'ler korunur; yarım işler kira süresi dolunca devam eder |
+| Belirsiz teslim | `delivery:resolve --delivery <id> --as SENT\|RETRY` | Operatör kararı; otomatik tekrar yok |
+
+**Kod geri dönüşü (v1.2 → v1.1.x):** şema aynı olduğu için veritabanı geri dönüşü gerekmez; v1.2 ile üretilmiş sayılar eski kodla da okunur.
+
+```bash
+git log --oneline -3                       # v1.2 birleştirmesinden önceki commit (69f965a: PR #22 birleştirmesi)
+git checkout 69f965a
+docker compose build server && docker compose up -d
+docker compose exec -T server node dist/bootstrap/cli.js system:check | jq '{scheduler, mail}'
+```
+
+Geri dönüşten sonra yeni sayılar yine v2 promptlarıyla yazılır; v3 ile yazılmış varyantlar yeniden kullanılmaz (parmak izi farklı). Yedekten geri yükleme yalnızca veri kaybında gerekir (`pg_restore` + `/data` arşivi, §2).
+
+## 18. Bilinen sınırlar ve sonraki kilometre taşları
+
+Sınırlar:
+
+- Analiz yalnızca özete dayanır; yazılar bunu açıkça belirtir. Özetin söylemediği hiçbir şey hakkında hüküm verilmez, bu da bazı sınırların "özette belirtilmiyor" olarak kalması demektir.
+- "Özette yok ≠ çalışmada yok" denetimi Türkçe ve kalıp tabanlıdır: farklı bir ifadeyi kaçırabilir veya nadiren meşru bir cümleyi reddedebilir (tekrar denenebilir `VALIDATION_FAILED`, bir yazı maliyeti). İngilizce iç analiz metni bu denetimden geçmez; okura giden metin geçer.
+- Aynı çalışmanın tespiti normalize başlık eşitliğine dayanır (başlığı değişmiş sürümler ayrı sayılabilir); çeşitlilik yalnızca ilk yazara bakar.
+- Sayıdaki makale sayısı araştırma bulgusuna bağlıdır; üç makale garanti edilemez.
+- SMTP kabulü gelen kutusuna ulaşmanın kanıtı değildir; geri dönen (bounce) ileti takibi yoktur. SPF/DKIM sağlayıcı tarafında yapılandırılır.
+- Bütçe günü UTC'dir (03:00 İstanbul). Rezervasyonlar en kötü durum maliyetiyle yapılır; gün sonunda gerçek harcama bütçenin biraz altında kalsa da yeni çağrı reddedilebilir.
+- Zamanlayıcı çözünürlüğü bir dakikadır; 10:00'dan sonra o gün için otomatik iş yapılmaz.
+- Türkçe sayı kelimeleri sayısal denetimde okunmaz; bilerek katı bırakılan birim belirsizlikleri §10'da.
+
+Sonraki kilometre taşları (bu sürümde yok):
+
+1. **Tam metin analizi:** açık erişimli PDF/HTML'den tam metin, `FULL_TEXT` kapsamı (şablon ve denetimler hazır: "Makalede belirtilmeyenler", tam metinde kapsam denetimi devre dışı).
+2. **Geri bildirime dayalı kişiselleştirme:** mevcut `feedback` kayıtlarını konu önceliği ve seçim sıralamasına yansıtmak.
+3. Bounce/şikâyet takibi ve teslim edilebilirlik raporu.
