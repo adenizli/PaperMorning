@@ -188,6 +188,8 @@ Zamanlayıcı yalnızca tek sunucu sürecinde çalışır; CLI süreçleri hiçb
 
 Sayısal denetim (`src/common/text/numeric-claims.ts`) sayıları **değerle** karşılaştırır: kaynaktaki "Thirty-two" çıktıdaki "32"yi, "470,000" Türkçe "470.000" ve "470 bin"i karşılar; "470" tek başına, "33", "1.200" (kaynak "1.2") veya "%75" (kaynak "%15–60") yine reddedilir. Hata mesajı alanı ve yakın metni gösterir: `numbers not present in the analysis/abstract: 470 [sections[evidence].body: "…470 deneme koşusunu…"]`.
 
+Sayıya yapışık harfler türüne göre okunur ve kaynakta **aynı türden** kanıt ister: Türkçe "3B" (üç boyutlu) ile "3D", "3 boyutlu", "three-dimensional" boyuttur; "7B parametre" milyardır. Türkçe "nB" bağlamla ayrılır ("parametre", "token", "$" → milyar; "poz", "görüntü", "nokta bulutu" … → boyut; aksi halde iki okuma da kendi kanıtıyla). Kaynaktaki "3D", "3 milyar"ı veya "3B parametre"yi desteklemez; "128-dimensional", "128 görev"i desteklemez. "4 K"/"4K" ayrıca kelvin olarak okunur. Kalan, bilerek katı bırakılan belirsizlikler (molar "M", tesla/trilyon "T", "4K video") `numeric-claims.ts` başında listelenmiştir.
+
 Bu yalnızca doğrulama kodudur; prompt ve şema sürümleri (analiz, `article-v2`, `outlook-v2`) **değişmedi**, bu yüzden parmak izleri aynıdır ve başarısız kayıtlar aynı satırda yeniden denenir. Elle veritabanı değişikliği, checkpoint sıfırlama veya kayıt silme gerekmez ve yapılmamalıdır.
 
 - **Yazı varyantı** (`article_variant`, `FAILED`, `retryable=true`): bir sonraki hazırlıkta aynı satır yeniden talep edilir, koşul `attempt_count < 3`. Reddedilen çıktı saklanmadığı için bu **bir** yeni Claude yazı çağrısıdır; tamamlanmış diğer varyantlar, analizler ve seçim yeniden ödenmez.
@@ -201,7 +203,7 @@ docker compose exec -T server node dist/bootstrap/cli.js publication:status --us
 docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
   SELECT issue_date, status, stage, attempt_count, retryable, next_attempt_at, error_kind, left(error_message, 200) AS error
     FROM publication_run WHERE issue_date = '"'"'2026-11-28'"'"';
-  SELECT id, status, attempt_count, retryable, prompt_version, error_kind, left(error_message, 200) AS error
+  SELECT left(generation_fingerprint, 12) AS fp, status, attempt_count, retryable, prompt_version, error_kind, left(error_message, 200) AS error
     FROM article_variant WHERE status <> '"'"'COMPLETED'"'"' ORDER BY updated_at DESC LIMIT 10;
   SELECT id, status, attempt_count, retryable, error_kind, left(error_message, 200) AS error
     FROM paper_analysis WHERE status = '"'"'FAILED'"'"' ORDER BY updated_at DESC LIMIT 10;"'
@@ -212,6 +214,7 @@ Karar:
 | Durum | Yapılacak |
 |---|---|
 | Çalıştırma `attempt_count < 5`, varyant `attempt_count < 3`, `retryable=true` | `publication:status` `PREPARE` diyorsa (veya `WAIT` ise `at` zamanından sonra) `publication:prepare --user <u> --date 2026-11-28`. Beklenen: `READY`, `retry` yok; çalıştırmanın `attempt_count`'u bir artar, varyant satırı aynı kalır (`attempt_count` +1, `COMPLETED`). |
+| Logdaki varyant kimliği (`Article variant c8312969b88e failed`) | `fp` sütunu logdaki 12 karakterle eşleşir. Yazılar seçim sırasıyla tek tek yazılır ve ilk hatada çalıştırma durur: bir varyantın `attempt_count`'u, çalıştırmanın değil **o varyantın** kaç kez yazıldığıdır. |
 | Varyant `attempt_count = 3` (deneme hakkı bitti) | Çalıştırma her denemede aynı hatayla `WRITING`'de başarısız olur ve çalıştırma hakkını tüketir: **`publication:prepare` çalıştırmayın.** Aynı makale aynı düzey için seçildiği sürece sonraki tarihler de etkilenir. Elle SQL ile sıfırlamayın; operatör kararı gerekir (ayrı, denetimli bir değişiklik). |
 | `publication:status` `MANUAL` | Çalıştırma hakkı bitmiş veya hata kalıcı: tarihi yeniden üretmeyin, yeni sayı yeni tarihtir (bkz. §0). |
 

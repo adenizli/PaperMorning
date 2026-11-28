@@ -16,20 +16,55 @@
  * always accepted: its ambiguity, if any, is the source's own. Small integers (0-10) and years
  * written as plain digits are tolerated because they are not quantitative research claims.
  * Number words are recognised in English only; Turkish number words are not checked.
+ *
+ * Every mention has typed READINGS, and the source supplies separate evidence per kind, so a
+ * match of one kind never vouches for another kind with the same number:
+ *
+ *   - quantity:  "470", "470 bin", "7B" (7 billion), "4K" (4 thousand)
+ *   - dimension: "3D", "3-D", "2.5D", "3 boyutlu", "three-dimensional", Turkish "3B" (üç boyutlu)
+ *   - kelvin:    "4 K", "4K", "300 kelvin"
+ *
+ * Letters glued to a number are a known collision point. How each is read:
+ *
+ *   - D  -> dimension only. Uppercase only ("3d" may be "3 days"); "6-DoF"/"6DOF" is not a suffix.
+ *   - B  -> English text: billion. Turkish text: "3B" is ALSO the standard abbreviation of "üç
+ *           boyutlu" (3D), so it has both readings. The next words decide when they can:
+ *           "parametre", "token", "$", ... -> billion only; "poz", "görüntü", "nokta bulutu",
+ *           ... -> dimension only; otherwise either reading, each needing its OWN source evidence
+ *           (source "3D" supports "3B" as a dimension, never "3 milyar").
+ *   - K  -> thousand, or kelvin (quantum-physics abstracts write "4 K"/"4K"); kelvin needs a
+ *           kelvin mention in the source.
+ *   - k, M, bn -> thousand / million / billion only.
+ *   - Turkish scale words (bin, milyon, milyar, trilyon) are read only in Turkish text: in an
+ *     English source "10 bin histogram" is ten bins, not ten thousand.
+ *
+ * Remaining, deliberately strict ambiguities (rejected unless the source uses the same form):
+ * "M" as molar ("5M NaCl"), "T" as tesla or trillion ("9T", "15T tokens" are read as 9 and 15),
+ * "K" as a resolution ("4K video"), and a neutral-context Turkish "3B" when the source supports
+ * both 3D and 3 billion (accepted: either reading is grounded).
  */
 
 export type NumberLocale = 'en' | 'tr';
 
+export type ReadingKind = 'quantity' | 'dimension' | 'kelvin';
+
+export interface NumericReading {
+  kind: ReadingKind;
+  value: number;
+}
+
 export interface NumericMention {
-  /** As written, including any scale word: "470 bin", "Thirty-two", "1.2M". */
+  /** As written, including any scale word or unit: "470 bin", "Thirty-two", "1.2M", "3B". */
   raw: string;
   index: number;
   /** Digits and separators exactly as written ('' for number words). */
   literal: string;
-  /** Value under the text's conventions; null when the separators fit no format ("1.2.3"). */
+  /** The first reading's value; null when the separators fit no format ("1.2.3"). */
   value: number | null;
-  /** A scale word or suffix multiplied the literal ("470 bin", "7B"). */
-  scaled: boolean;
+  /** Every plausible meaning; supported when ANY reading has source evidence of its own kind. */
+  readings: NumericReading[];
+  /** Reads as the bare number (no scale, no dimension): verbatim-literal and tolerance rules apply. */
+  plain: boolean;
   /** Small integer or plain-digit year: never a research claim on its own. */
   tolerated: boolean;
   /** "12 300" with an ordinary space may be two numbers: these are the separate readings. */
@@ -54,7 +89,11 @@ const NUMBER = new RegExp(
   `(?<!\\d)(?:\\d{1,3}(?:${GROUP_SPACE}\\d{3})+(?:[.,]\\d+)?(?!\\d)|\\d+(?:[.,]\\d+)*)`,
   'g',
 );
-const SCALE_SUFFIX = /^(k|K|M|B|bn)(?![\p{L}\d])/u;
+/** Letters glued to the number. Uppercase D only; a following letter or digit cancels it. */
+const LETTER_SUFFIX = /^(?:(-?D)|(k|K|M|B|bn))(?![\p{L}\d])/u;
+const DIMENSION_WORD =
+  /^(?:[ \u00A0\u202F]|[ \u00A0\u202F]?-)?(?:boyut\p{L}*|dimension(?:al|s)?(?!\p{L}))/iu;
+const KELVIN_SPACED = /^[ \u00A0\u202F](?:K(?![\p{L}\d])|[Kk]elvin\p{L}*)/u;
 const SCALE_WORD = /^[ \u00A0\u202F]+(\p{L}+)/u;
 const SCALES: Record<string, number> = {
   thousand: 1e3,
@@ -82,6 +121,80 @@ const TR_CASE: Record<string, RegExp> = {
   trilyon: trCase('a', 'u'),
 };
 const ENGLISH_SCALES = new Set(['thousand', 'million', 'billion', 'trillion']);
+
+/** Word stems after a Turkish "nB" that make it a count of billions ("7B parametre"). */
+const BILLION_CONTEXT = [
+  'parametre',
+  'param',
+  'token',
+  'dolar',
+  'dollar',
+  'usd',
+  'euro',
+  'avro',
+  'lira',
+  'kullanıcı',
+  'user',
+];
+/** Word stems after a Turkish "nB" that make it spatial ("3B poz", "2B görüntü"). */
+const DIMENSION_CONTEXT = [
+  'poz',
+  'pose',
+  'görüntü',
+  'imge',
+  'image',
+  'nokta',
+  'point',
+  'bulut',
+  'cloud',
+  'sahne',
+  'scene',
+  'uzay',
+  'space',
+  'konum',
+  'position',
+  'geometr',
+  'şekil',
+  'shape',
+  'harita',
+  'map',
+  'algı',
+  'percept',
+  'baskı',
+  'yazıcı',
+  'print',
+  'yüzey',
+  'surface',
+  'derinlik',
+  'depth',
+  'rekonstr',
+  'reconstr',
+  'nesne',
+  'object',
+  'mesh',
+  'ortam',
+  'environment',
+  'çevre',
+  'dünya',
+  'world',
+  'görsel',
+  'visual',
+  'tarama',
+  'scan',
+  'koordinat',
+  'coordinat',
+  'rotasyon',
+  'rotation',
+  'yönelim',
+  'orientation',
+  'hareket',
+  'motion',
+  'sınırlayıcı',
+  'bounding',
+  'kutu',
+  'box',
+  'gauss',
+];
 
 const SMALL: Record<string, number> = {
   zero: 0,
@@ -118,18 +231,90 @@ const TENS: Record<string, number> = {
 
 const valueKey = (value: number): string => String(Number(value.toPrecision(12)));
 
-function scaleAt(text: string, end: number): { multiplier: number; length: number } | null {
+/**
+ * What the words right after a Turkish "nB" say it is: up to two words, within the sentence,
+ * after any apostrophe suffix ("3B'lik"); "$3B" is money.
+ */
+function bContext(text: string, start: number, end: number): 'billion' | 'dimension' | null {
+  if (/\$\s*$/.test(text.slice(Math.max(0, start - 2), start))) return 'billion';
+  const rest = text
+    .slice(end, end + 80)
+    .replace(/^['’]\p{L}*/u, '')
+    .split(/[.;:!?]/)[0];
+  const words = [...rest.matchAll(/\p{L}+/gu)].slice(0, 2).map((m) => m[0].toLocaleLowerCase('tr'));
+  const has = (stems: string[]) => words.some((w) => stems.some((stem) => w.startsWith(stem)));
+  const billion = has(BILLION_CONTEXT);
+  const dimension = has(DIMENSION_CONTEXT);
+  if (billion === dimension) return null;
+  return billion ? 'billion' : 'dimension';
+}
+
+interface Affix {
+  length: number;
+  readings: (base: number) => NumericReading[];
+  /** The bare number is one of the readings (a unit, not a scale or a dimension). */
+  plain: boolean;
+}
+
+const quantity = (value: number): NumericReading => ({ kind: 'quantity', value });
+
+/** The scale word, suffix or unit right after a number, and the readings it allows. */
+function affixAt(text: string, start: number, end: number, locale: NumberLocale): Affix | null {
   const rest = text.slice(end, end + 24);
-  const suffix = SCALE_SUFFIX.exec(rest);
-  if (suffix) return { multiplier: SUFFIX_SCALES[suffix[1]], length: suffix[0].length };
+  const letter = LETTER_SUFFIX.exec(rest);
+  if (letter) {
+    const length = letter[0].length;
+    if (letter[1])
+      return { length, plain: false, readings: (n) => [{ kind: 'dimension', value: n }] };
+    const suffix = letter[2];
+    const scaled = (n: number) => quantity(n * SUFFIX_SCALES[suffix]);
+    if (suffix === 'K') {
+      return { length, plain: false, readings: (n) => [scaled(n), { kind: 'kelvin', value: n }] };
+    }
+    if (suffix === 'B' && locale === 'tr') {
+      const context = bContext(text, start, end + length);
+      return {
+        length,
+        plain: false,
+        readings: (n) =>
+          context === 'billion'
+            ? [scaled(n)]
+            : context === 'dimension'
+              ? [{ kind: 'dimension', value: n }]
+              : [scaled(n), { kind: 'dimension', value: n }],
+      };
+    }
+    return { length, plain: false, readings: (n) => [scaled(n)] };
+  }
+  const dimension = DIMENSION_WORD.exec(rest);
+  if (dimension) {
+    return {
+      length: dimension[0].length,
+      plain: false,
+      readings: (n) => [{ kind: 'dimension', value: n }],
+    };
+  }
+  const kelvin = KELVIN_SPACED.exec(rest);
+  if (kelvin) {
+    return {
+      length: kelvin[0].length,
+      plain: true,
+      readings: (n) => [quantity(n), { kind: 'kelvin', value: n }],
+    };
+  }
   const word = SCALE_WORD.exec(rest);
   if (!word) return null;
   const english = word[1].toLowerCase();
-  if (ENGLISH_SCALES.has(english)) return { multiplier: SCALES[english], length: word[0].length };
+  if (ENGLISH_SCALES.has(english)) {
+    const multiplier = SCALES[english];
+    return { length: word[0].length, plain: false, readings: (n) => [quantity(n * multiplier)] };
+  }
+  if (locale !== 'tr') return null;
   const turkish = word[1].toLocaleLowerCase('tr');
   for (const [stem, ending] of Object.entries(TR_CASE)) {
     if (turkish.startsWith(stem) && ending.test(turkish.slice(stem.length))) {
-      return { multiplier: SCALES[stem], length: word[0].length };
+      const multiplier = SCALES[stem];
+      return { length: word[0].length, plain: false, readings: (n) => [quantity(n * multiplier)] };
     }
   }
   return null;
@@ -196,20 +381,24 @@ function digitMentions(text: string, locale: NumberLocale): NumericMention[] {
     } else {
       base = readSeparated(literal, locale);
     }
-    const scale = scaleAt(text, index + literal.length);
-    const value = base.value === null ? null : scale ? base.value * scale.multiplier : base.value;
+    const affix = affixAt(text, index, index + literal.length, locale);
+    const readings =
+      base.value === null ? [] : affix ? affix.readings(base.value) : [quantity(base.value)];
+    const plain = !affix || affix.plain;
     const tolerated =
-      !scale &&
+      plain &&
       !base.grouped &&
-      value !== null &&
-      Number.isInteger(value) &&
-      ((value >= 0 && value <= 10) || (/^\d{4}$/.test(literal) && value >= 1900 && value <= 2100));
+      base.value !== null &&
+      Number.isInteger(base.value) &&
+      ((base.value >= 0 && base.value <= 10) ||
+        (/^\d{4}$/.test(literal) && base.value >= 1900 && base.value <= 2100));
     mentions.push({
-      raw: text.slice(index, index + literal.length + (scale?.length ?? 0)),
+      raw: text.slice(index, index + literal.length + (affix?.length ?? 0)),
       index,
       literal,
-      value,
-      scaled: scale !== null,
+      value: readings[0]?.value ?? null,
+      readings,
+      plain,
       tolerated,
       parts,
     });
@@ -287,13 +476,18 @@ function wordMentions(text: string): NumericMention[] {
     }
     const value = total + current;
     const single = end === i;
+    // "three-dimensional", "three dimensions": a dimension, not a count.
+    const dimension = /^[\s-]+dimension(?:al|s)?(?!\p{L})/iu.exec(
+      text.slice(words[end].end, words[end].end + 16),
+    );
     mentions.push({
-      raw: text.slice(words[i].start, words[end].end),
+      raw: text.slice(words[i].start, words[end].end + (dimension?.[0].length ?? 0)),
       index: words[i].start,
       literal: '',
       value,
-      scaled: false,
-      tolerated: single && value <= 10,
+      readings: [{ kind: dimension ? 'dimension' : 'quantity', value }],
+      plain: !dimension,
+      tolerated: !dimension && single && value <= 10,
     });
     i = end + 1;
   }
@@ -305,17 +499,22 @@ export function numericMentions(text: string, locale: NumberLocale = 'en'): Nume
   return [...digitMentions(text, locale), ...wordMentions(text)].sort((a, b) => a.index - b.index);
 }
 
+/** Source evidence, one pool per reading kind: a dimension never vouches for a quantity. */
 interface SourceNumbers {
-  values: Set<string>;
+  values: Record<ReadingKind, Set<string>>;
   literals: Set<string>;
 }
 
 function sourceNumbers(source: string): SourceNumbers {
-  const values = new Set<string>();
+  const values: SourceNumbers['values'] = {
+    quantity: new Set(),
+    dimension: new Set(),
+    kelvin: new Set(),
+  };
   const literals = new Set<string>();
   const add = (m: NumericMention) => {
-    if (m.value !== null) values.add(valueKey(m.value));
-    if (m.literal && !m.scaled) literals.add(m.literal);
+    for (const reading of m.readings) values[reading.kind].add(valueKey(reading.value));
+    if (m.literal && m.plain) literals.add(m.literal);
     m.parts?.forEach(add);
   };
   numericMentions(source, 'en').forEach(add);
@@ -324,8 +523,8 @@ function sourceNumbers(source: string): SourceNumbers {
 
 function isSupported(m: NumericMention, source: SourceNumbers): boolean {
   if (m.tolerated) return true;
-  if (m.literal && !m.scaled && source.literals.has(m.literal)) return true;
-  if (m.value !== null && source.values.has(valueKey(m.value))) return true;
+  if (m.literal && m.plain && source.literals.has(m.literal)) return true;
+  if (m.readings.some((r) => source.values[r.kind].has(valueKey(r.value)))) return true;
   return m.parts?.every((p) => isSupported(p, source)) ?? false;
 }
 
